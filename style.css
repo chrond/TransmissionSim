@@ -56,6 +56,14 @@ body {
   vertical-align: top;
 }
 
+#graphArea {
+  display: inline-block;
+  width: 745px;
+  height: 350px;
+  border: 1px solid #999999;
+  margin-left: 10px;
+}
+
 .statItem {
 }
 
