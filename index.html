@@ -482,6 +482,16 @@
     function ManageICU() {
       while (icuBalls.length < icuCapacity && critBalls.length > 0) {
         let ball = critBalls[0];
+        
+        //when ball enters icu, stop the existing infectionTimer and create a new one for 40% the normal recovery time
+        if (ball.infectionTimer) {
+          ball.infectionTimer.stop()
+          ball.infectionTimer = d3.timeout(
+            DoRecover.bind(ball,ball), //bind to ball context, and pass ball as an argument
+            recoveryTime*400
+          );
+        }
+        
         icuBalls.push(ball);
         critBalls.splice(0,1);
         ball.critical = false;
