@@ -1,0 +1,2 @@
+# TransmissionSim
+Contagion transmission simulator
