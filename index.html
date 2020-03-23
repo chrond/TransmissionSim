@@ -101,7 +101,6 @@
           case "dead":
             this.state = newState;
             this.color = color_dead;
-            this.speed = this.speed/2;
             IncrementDeaths();
             break;
           case "buried":
@@ -162,8 +161,13 @@
       }
 
       this.Move = function () {
-        this.posX += this.vx * this.speedFactor;
-        this.posY += this.vy * this.speedFactor;
+        let factor = this.speedFactor;
+        if (this.critical) factor = factor * 0.5;
+        else if (this.icu) factor = factor * 0.3;
+        else if (this.state === "dead") factor = factor * 0.2;
+        
+        this.posX += this.vx * factor;
+        this.posY += this.vy * factor;
 
         this.CheckBounds();
       }
@@ -513,6 +517,7 @@
         if (ball.critical) {
           for (let i = 0; i < critBalls.length; i++) {
             if (critBalls[i] === ball) {
+              ball.critical = false;
               critBalls.splice(i,1);
               DecrementCritical();
             }
@@ -522,6 +527,7 @@
         if (ball.icu) {
           for (let i = 0; i < icuBalls.length; i++) {
             if (icuBalls[i] === ball) {
+              ball.icu = false;
               icuBalls.splice(i,1);
               DecrementIcu();
               DecrementCritical();
@@ -554,7 +560,7 @@
       if (ball && ball.criticalTimer) {
         critBalls.push(ball);
         ball.critical = true;
-        ball.speedFactor = ball.speedFactor * 0.3;
+        //ball.speedFactor = ball.speedFactor * 0.3;
         ball.color = color_critical;
         d3.select("#" + ball.id).style("fill", ball.color);
         IncrementCritical();
@@ -728,7 +734,7 @@
       infectedCount--;
       infectedCountObj.innerHTML = infectedCount;
       if (infectedCount <= 0) {
-        simEndTimer = d3.timeout(StopSim(), 500);
+        simEndTimer = d3.timeout(StopSim, 1000);
       }
     }
     function IncrementRecovered() {
