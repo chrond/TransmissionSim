@@ -44,10 +44,6 @@ body {
   margin-top: 10px;
 }
 
-.button {
-  margin-bottom: 10px;
-}
-
 #statBox {
   width: 100%;
   height: 400px;
@@ -95,3 +91,29 @@ body {
   background: #c5c5c5;
   cursor: default;
 }
+
+.button {
+  font-weight: bold;
+  color: #FFFFFF;
+  background-color: #3565EE;
+  outline: none;
+  border: none;
+  padding: 10px 0px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: #2555F0;
+}
+
+.button:active:enabled {
+  background-color: #1949F3;
+  //transform: translateY(1px);
+}
+
+.button:disabled {
+  color: #EEEEEE;
+  background-color: #999999;
+  cursor: default;
+}
+
