@@ -46,6 +46,8 @@
     var infectedCount = 0;
     var recoveredCount = 0;
     var deathCount = 0;
+    var criticalCount = 0;
+    var icuCount = 0;
 
     // Ball object
     function Ball(svg, id, x, y, state, angle, radius, speed, highRisk) {
@@ -422,10 +424,14 @@
         infectedCount = 0;
         recoveredCount = 0;
         deathCount = 0;
+        criticalCount = 0;
+        icuCount = 0;
         healthyCountObj.innerHTML = healthyCount;
         infectedCountObj.innerHTML = infectedCount;
         recoveredCountObj.innerHTML = recoveredCount;
         deathCountObj.innerHTML = deathCount;
+        criticalCountObj.innerHTML = criticalCount;
+        icuCountObj.innerHTML = icuCount;
         
         //Initialize interaction reduction
         RI_Total = 0;
@@ -483,6 +489,7 @@
         
         ball.color = color_icu;
         d3.select("#" + ball.id).style("fill", ball.color);
+        IncrementIcu();
       }
     }
     
@@ -495,6 +502,7 @@
           for (let i = 0; i < critBalls.length; i++) {
             if (critBalls[i] === ball) {
               critBalls.splice(i,1);
+              DecrementCritical();
             }
           }
         }
@@ -503,6 +511,8 @@
           for (let i = 0; i < icuBalls.length; i++) {
             if (icuBalls[i] === ball) {
               icuBalls.splice(i,1);
+              DecrementIcu();
+              DecrementCritical();
             }
           }
         }
@@ -531,9 +541,11 @@
     function DoCritical(ball) {
       if (ball && ball.criticalTimer) {
         critBalls.push(ball);
+        ball.critical = true;
         ball.speedFactor = 0.3;
         ball.color = color_critical;
         d3.select("#" + ball.id).style("fill", ball.color);
+        IncrementCritical();
       }
     }
 
@@ -668,10 +680,14 @@
     <div id="statBox">
       <div id="textPanel">
         <div class="attributeGroup">
-          <div class="statItem">Healthy: <span id="healthyCount">0</span></div>
-          <div class="statItem" style="margin-top: 8px">Infected: <span id="infectedCount">0</span></div>
-          <div class="statItem" style="margin-top: 8px">Recovered: <span id="recoveredCount">0</span></div>
-          <div class="statItem" style="margin-top: 8px">Deaths: <span id="deathCount">0</span></div>
+          <div class="statItem">Healthy: <span class="statValue" id="healthyCount" style="color:rgb(90,160,255);">0</span></div>
+          <div class="statItem" style="margin-top: 8px; margin-bottom: 3px;">Infected: <span class="statValue" id="infectedCount" style="color:rgb(180,100,60);">0</span></div>
+          <div style="padding: 10px; background-color: #E0E0F5;">
+            <div class="statItem">Critical: <span class="statValue" id="criticalCount" style="color:rgb(255,0,0);">0</span></div>
+            <div class="statItem" style="margin-top: 8px">In ICU: <span class="statValue" id="icuCount" style="color:rgb(255,0,200);">0</span></div>
+          </div>
+          <div class="statItem" style="margin-top: 8px">Recovered: <span class="statValue" id="recoveredCount" style="color:rgb(150,200,130);">0</span></div>
+          <div class="statItem" style="margin-top: 8px">Deaths: <span class="statValue" id="deathCount" style="color:rgb(0,0,0);">0</span></div>
         </div>
       </div>
     </div>
@@ -683,6 +699,8 @@
     var infectedCountObj = document.getElementById("infectedCount");
     var recoveredCountObj = document.getElementById("recoveredCount");
     var deathCountObj = document.getElementById("deathCount");
+    var criticalCountObj = document.getElementById("criticalCount");
+    var icuCountObj = document.getElementById("icuCount");
     
     function DecrementHealthy() {
       healthyCount--;
@@ -707,6 +725,22 @@
       deathCount++;
       deathCountObj.innerHTML = deathCount;
       DecrementInfected();
+    }
+    function IncrementCritical() {
+      criticalCount++;
+      criticalCountObj.innerHTML = criticalCount;
+    }
+    function DecrementCritical() {
+      criticalCount--;
+      criticalCountObj.innerHTML = criticalCount;
+    }
+    function IncrementIcu() {
+      icuCount++;
+      icuCountObj.innerHTML = icuCount;
+    }
+    function DecrementIcu() {
+      icuCount--;
+      icuCountObj.innerHTML = icuCount;
     }
 
     // Initialize inputs

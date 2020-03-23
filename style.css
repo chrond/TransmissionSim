@@ -1,6 +1,6 @@
 
 body {
-  font-family: sans-serif;
+  font-family: Helvetica, Arial, sans-serif;
 }
 
 #mainDiv {
@@ -52,11 +52,15 @@ body {
 
 #textPanel {
   display: inline-block;
-  width: 200px;
+  width: 145px;
   vertical-align: top;
 }
 
 .statItem {
+}
+
+.statValue {
+  font-weight: bold;
 }
 
 .slider {
