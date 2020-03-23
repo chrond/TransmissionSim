@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Transmission Simulator</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="style.css">
+    <script src="http://d3js.org/d3.v5.min.js"></script>
+</head>
+<body>
+
+<script>
+    var boundSizeX, boundSizeY;
+    
+    var balls = []; // array for ball objects
+    var critBalls = []; // array for balls in critical condition (waiting for icu)
+    var icuBalls = []; // array for balls in intensive care (in icu)
+    
+    var radius_default = 6;
+    
+    var color_initial = d3.rgb(90,160,255);
+    var color_infected = d3.rgb(180,100,60);
+    var color_recovered = d3.rgb(150,200,130);
+    var color_critical = d3.rgb(255,0,0);
+    var color_icu = d3.rgb(255,0,200);
+    var color_dead = d3.rgb(60,30,60);
+    
+    var simInProgress = false;
+    var startPauseFlag = null;
+
+    // Contagion
+    var recoveryTime = 8;
+    var criticalCaseRate = 0.15; // chance for each infection to become a critical case
+    var criticalDeathRate = 0.5; // death rate for critical cases that do NOT get intensive care
+    
+    // Hospital
+    var icuCapacity = 1; // 0 to 20
+    var icuDeathRate = 0.05; // death rate for critical cases that get intensive care
+
+    // Behavior - Reduced Interaction
+    var RI_PopPercent = 0; //0 to 100
+    var RI_Total = 0;
+    var RI_SpeedReduction = 80; //30 to 90
+
+    // Stats
+    var healthyCount = 0;
+    var infectedCount = 0;
+    var recoveredCount = 0;
+    var deathCount = 0;
+
+    // Ball object
+    function Ball(svg, id, x, y, state, angle, radius, speed, highRisk) {
+      this.posX = x;
+      this.posY = y;
+      this.radius = radius;
+      this.speed = speed;
+      this.highRisk = highRisk; // will become critical if infected
+      this.svg = svg; // parent SVG
+      this.id = id; // id of ball
+      this.angle = angle; // initial angle of movement in radians
+      this.color = color_initial;
+      this.infectionTimer = null;
+      this.deathTimer = null;
+      this.criticalTimer = null;
+      this.speedFactor = 1; // dynamically changing speed factor for interaction reduction
+      this.critical = false;
+      this.icu = false;
+
+      if (!this.angle)
+        this.angle = Math.PI / 7;
+      if (!this.radius)
+        this.radius = radius_default;
+      if (!this.state)
+        this.state = "initial";
+
+      this.data = [this.id]; // allow us to use d3.enter()
+
+      // angle is used only for initialization
+      // direction and speed together is velocity
+      this.vx = Math.cos(this.angle) * this.speed; // velocity x
+      this.vy = Math.sin(this.angle) * this.speed; // velocity y
+
+      this.SetState = function (newState) {
+        switch(newState) {
+          case "initial":
+            this.state = newState;
+            this.color = color_initial;
+            break;
+          case "infected":
+            this.state = newState;
+            this.color = color_infected;
+            IncrementInfected();
+            break;
+          case "recovered":
+            this.state = newState;
+            this.color = color_recovered;
+            IncrementRecovered();
+            break;
+          case "dead":
+            this.state = newState;
+            this.color = color_dead;
+            this.speed = this.speed/2;
+            IncrementDeaths();
+            break;
+          case "buried":
+            this.state = newState;
+            break;
+          default:
+            this.state = newState;
+            this.color = color_initial;
+        }
+        
+        d3.select("#" + this.id).style("fill", this.color);
+        
+        // if infected, start recovery timer
+        if (this.state == "infected") {
+          this.infectionTimer = d3.timeout(
+            DoRecover.bind(this,this), //bind to this context, and pass this as an argument
+            recoveryTime*1000
+          );
+          
+          // if high risk, start critical timer
+          if (this.highRisk) {
+            this.criticalTimer = d3.timeout(
+              DoCritical.bind(this,this), //bind to this context, and pass this as an argument
+              recoveryTime*500
+            );
+          }
+        }
+        
+        // if dead, start death timer
+        if (this.state == "dead") {
+          this.deathTimer = d3.timeout(
+            DoDeath.bind(this,this), //bind to this context, and pass this as an argument
+            500
+          );
+        }
+      }
+      
+      this.SetState(this.state); //set the color based on state
+
+      this.Draw = function () {
+        if (this.state != "buried") {
+          let svg = this.svg;
+          let ball = svg.selectAll('#' + this.id)
+            .data(this.data)
+          ;
+          ball.enter()
+            .append("circle")
+            .attr("id", this.id)
+            .attr('class', 'ball')
+            .attr('r', this.radius)
+            .style("fill", this.color)
+          ;
+          ball
+            .attr("cx", this.posX)
+            .attr("cy", this.posY)
+          ;
+        }
+      }
+
+      this.Move = function () {
+        this.posX += this.vx * this.speedFactor;
+        this.posY += this.vy * this.speedFactor;
+
+        this.CheckBounds();
+      }
+
+      this.CheckBounds = function () {
+        let svg = this.svg;
+        let svgWidth = parseInt(svg.attr('width'));
+        let svgHeight = parseInt(svg.attr('height'));
+
+        //Handle bounds collision
+        if (this.posX >= svgWidth - this.radius) {
+          this.posX = svgWidth - this.radius - 1;
+          this.vx = -Math.abs(this.vx);
+        }
+        if ( this.posX <= this.radius) {
+          this.posX = this.radius+1;
+          this.vx = Math.abs(this.vx);
+        }
+        if (this.posY >= svgHeight - this.radius) {
+          this.posY = svgHeight - this.radius - 1;
+          this.vy = -Math.abs(this.vy);
+        }
+        if (this.posY <= this.radius) {
+          this.posY = this.radius+1;
+          this.vy = Math.abs(this.vy);
+        }
+      }
+
+    } //End Ball
+
+    function CheckCollision(ball1, ball2) {
+      var absx = Math.abs(parseFloat(ball2.posX) - parseFloat(ball1.posX));
+      var absy = Math.abs(parseFloat(ball2.posY) - parseFloat(ball1.posY));
+
+      // find distance between two balls.
+      var distance = (absx * absx) + (absy * absy);
+      distance = Math.sqrt(distance);
+      // check if distance is less than sum of two radius - if yes, collision
+      if (distance < (parseFloat(ball1.radius) + parseFloat(ball2.radius))) {
+        return true;
+      }
+      return false;
+    }
+
+    function ProcessCollision(b1, b2) {
+      if (b2 <= b1)
+        return;
+      if (b1 >= (balls.length-1) || b2 >= balls.length )
+        return;
+
+      ball1 = balls[b1];
+      ball2 = balls[b2];
+      
+      if (ball1.state == "buried" || ball2.state == "buried")
+        return;
+
+      if ( CheckCollision(ball1, ball2) ) {
+        if (ball1.state == "infected" && ball2.state == "initial") {
+          ball2.SetState("infected");
+        }
+        else if (ball2.state == "infected" && ball1.state == "initial") {
+          ball1.SetState("infected");
+        }
+
+        // calculate impulse vectors
+        let impulseX1 = ball1.posX - ball2.posX;
+        let impulseY1 = ball1.posY - ball2.posY;
+        let impulseX2 = ball2.posX - ball1.posX;
+        let impulseY2 = ball2.posY - ball1.posY;
+        
+        if (impulseX1 != 0 || impulseY1 != 0) {
+          // normalize the impulse vectors
+          let impulseMag1 = Math.sqrt(impulseX1*impulseX1 + impulseY1*impulseY1);
+          impulseX1 = impulseX1/impulseMag1;
+          impulseY1 = impulseY1/impulseMag1;
+          
+          // set new velocity
+          ball1.vx = impulseX1 * ball1.speed;
+          ball1.vy = impulseY1 * ball1.speed;
+        }
+        if (impulseX2 != 0 || impulseY2 != 0) {
+          // normalize the impulse vectors
+          let impulseMag2 = Math.sqrt(impulseX2*impulseX2 + impulseY2*impulseY2);
+          impulseX2 = impulseX2/impulseMag2;
+          impulseY2 = impulseY2/impulseMag2;
+          
+          // set new velocity
+          ball2.vx = impulseX2 * ball2.speed;
+          ball2.vy = impulseY2 * ball2.speed;
+        }
+
+        // make sure balls are not overlapping
+        let moveCount = 0
+        while (CheckCollision(ball1, ball2) && moveCount < 100 && (ball1.speed > 0 || ball2.speed > 0)) {
+          if (moveCount % 2 == 0)
+            ball1.Move();
+          else
+            ball2.Move();
+          moveCount++;
+        }
+      }
+    }
+
+    function Initialize(containerId) {
+      boundSizeY = document.getElementById(containerId).clientHeight;
+      boundSizeX = document.getElementById(containerId).clientWidth;
+      gContainerId = containerId;
+      gCanvasId = containerId + '_canvas';
+      gTopGroupId = containerId + '_topGroup';
+      
+      let svg = d3.select("#" + containerId).append("svg")
+        .attr("id", gCanvasId)
+        .attr("width", boundSizeX)
+        .attr("height", boundSizeY)
+        .append("g")
+        .attr("id", gTopGroupId)
+        .attr("x", 0)
+        .attr("y", 0)
+        .attr("width", boundSizeX)
+        .attr("height", boundSizeY)
+        .style("fill", "none")
+      ;
+
+      return svg;
+    }
+    
+    function StartPauseSim() {
+      if (startPauseFlag == null) {
+        startPauseFlag = 1;
+        let t = d3.timer(function () {
+          ManageICU();
+          for (let i = 0; i < balls.length; i++) {
+            balls[i].Move();
+            for (let j = i + 1; j < balls.length; j++) {
+              ProcessCollision(i, j);
+            }
+          }
+          for (let i = 0; i < balls.length; i++) {
+            balls[i].Draw();
+          }
+          if (startPauseFlag == null) t.stop();
+        }, 500);
+      }
+      else {
+        startPauseFlag = null;
+      }
+    }
+    
+    //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+    function shuffle(array) {
+      var currentIndex = array.length, temporaryValue, randomIndex;
+
+      // While there remain elements to shuffle...
+      while (0 !== currentIndex) {
+
+        // Pick a remaining element...
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+
+        // And swap it with the current element.
+        temporaryValue = array[currentIndex];
+        array[currentIndex] = array[randomIndex];
+        array[randomIndex] = temporaryValue;
+      }
+
+      return array;
+    }
+    
+    function SetTotalPopulation() {
+      // Clear existing timers
+      for (let i = 0; i < balls.length; i++) {
+        if (balls[i].infectionTimer)
+          balls[i].infectionTimer.stop();
+        if (balls[i].deathTimer)
+          balls[i].deathTimer.stop();
+        if (balls[i].criticalTimer)
+          balls[i].criticalTimer.stop();
+        balls[i] = null;
+      }
+      
+      // Remove all of the circles
+      d3.selectAll('.ball').remove();
+      
+      // Empty the arrays
+      balls.length = 0;
+      critBalls.length = 0;
+      icuBalls.length = 0;
+      
+      let po = document.getElementById('populationSelector');
+      let totalPopulation = po.options[po.selectedIndex].value;
+      let so = document.getElementById('speedSelector');
+      let speed = so.options[so.selectedIndex].value;
+
+      // Determine initial ball locations
+      let boundsArea = boundSizeX * boundSizeY;
+      let ballSpace = boundsArea / totalPopulation;
+      let ballLength = Math.sqrt(ballSpace);
+      let ballCountX = 0, ballCountY = 0, areaCapacity = 0;
+      do {
+        ballCountX = Math.floor(boundSizeX / ballLength);
+        ballCountY = Math.floor(boundSizeY / ballLength);
+        areaCapacity = ballCountX * ballCountY;
+        
+        if (areaCapacity < totalPopulation) {
+          ballLength--;
+        }
+      }
+      while (areaCapacity < totalPopulation && ballLength > radius_default*2 + 1);
+
+      // Expand height and width to fill the area
+      let ballWidth = Math.floor(boundSizeX / ballCountX);
+      let ballHeight = Math.floor(boundSizeY / ballCountY);
+      
+      // Add the balls
+      let row = 0, col = 0;
+      for (let i = 0; i < totalPopulation; i++) {
+        let x = col*ballWidth + Math.floor(ballWidth/2);
+        let y = row*ballHeight + Math.floor(ballHeight/2);
+        
+        let highRisk = Math.random() < criticalCaseRate;
+        
+        //Add ball
+        balls.push(new Ball(svg, 'n'+(i+1).toString(), x, y, "initial", Math.random()*2*Math.PI, radius_default, speed, highRisk));
+        
+        if (col == ballCountX-1) {
+          row++;
+          col = 0;
+        }
+        else {
+          col++;
+        }
+      }
+      
+      //Randomize array to prepare for interaction reduction
+      shuffle(balls);
+    }
+    
+    function StartSim() {
+      if (simInProgress && startPauseFlag == null) { //Start from paused
+        document.getElementById('startButton').disabled = true;
+        StartPauseSim();
+        //document.getElementById('startPause').disabled = false;
+        document.getElementById('stopButton').disabled = false;
+      }
+      else if (!simInProgress) { //Start from stopped
+        document.getElementById('startButton').disabled = true;
+        document.getElementById('speedSelector').disabled = true;
+        document.getElementById('populationSelector').disabled = true;
+        document.getElementById('recoveryTimeSelector').disabled = true;
+        document.getElementById('criticalCaseRateSelector').disabled = true;
+        document.getElementById('criticalDeathRateSelector').disabled = true;
+        simInProgress = true;
+        
+        //Create the balls
+        SetTotalPopulation();
+        
+        //Update stats
+        healthyCount = balls.length;
+        infectedCount = 0;
+        recoveredCount = 0;
+        deathCount = 0;
+        healthyCountObj.innerHTML = healthyCount;
+        infectedCountObj.innerHTML = infectedCount;
+        recoveredCountObj.innerHTML = recoveredCount;
+        deathCountObj.innerHTML = deathCount;
+        
+        //Initialize interaction reduction
+        RI_Total = 0;
+        SetPopPercent();
+        
+        //Infect a ball
+        balls[Math.floor(Math.random() * balls.length)].SetState("infected");
+        
+        //Start the sim
+        StartPauseSim();
+        //document.getElementById('startPause').disabled = false;
+        document.getElementById('stopButton').disabled = false;
+      }
+    }
+    
+    function PauseSim() {
+      if (simInProgress && startPauseFlag != null) {
+        //document.getElementById('startPause').disabled = true;
+        StartPauseSim();
+        document.getElementById('startButton').disabled = false;
+      }
+    }
+    
+    function StopSim() {
+      document.getElementById('stopButton').disabled = true;
+      //document.getElementById('startPause').disabled = true;
+      startPauseFlag = null; // animation will stop
+      
+      simInProgress = false;
+      
+      // Clear existing timers
+      for (let i = 0; i < balls.length; i++) {
+        if (balls[i].infectionTimer)
+          balls[i].infectionTimer.stop();
+        if (balls[i].deathTimer)
+          balls[i].deathTimer.stop();
+        if (balls[i].criticalTimer)
+          balls[i].criticalTimer.stop();
+      }
+      document.getElementById('startButton').disabled = false;
+      document.getElementById('speedSelector').disabled = false;
+      document.getElementById('populationSelector').disabled = false;
+      document.getElementById('recoveryTimeSelector').disabled = false;
+      document.getElementById('criticalCaseRateSelector').disabled = false;
+      document.getElementById('criticalDeathRateSelector').disabled = false;
+    }
+    
+    function ManageICU() {
+      while (icuBalls.length < icuCapacity && critBalls.length > 0) {
+        let ball = critBalls[0];
+        icuBalls.push(ball);
+        critBalls.splice(0,1);
+        ball.critical = false;
+        ball.icu = true;
+        
+        ball.color = color_icu;
+        d3.select("#" + ball.id).style("fill", ball.color);
+      }
+    }
+    
+    // The callback function for the infection timer
+    function DoRecover(ball) {
+      if (ball && ball.infectionTimer) {
+        
+        // Remove from critical array
+        if (ball.critical) {
+          for (let i = 0; i < critBalls.length; i++) {
+            if (critBalls[i] === ball) {
+              critBalls.splice(i,1);
+            }
+          }
+        }
+        // Remove from icu array
+        if (ball.icu) {
+          for (let i = 0; i < icuBalls.length; i++) {
+            if (icuBalls[i] === ball) {
+              icuBalls.splice(i,1);
+            }
+          }
+        }
+        
+        if (ball.highRisk && !ball.icu && Math.random() < criticalDeathRate) {
+          ball.SetState("dead");
+        }
+        else if (ball.highRisk && Math.random() < icuDeathRate) {
+          ball.SetState("dead");
+        }
+        else {
+          ball.SetState("recovered");
+        }
+      }
+    }
+    
+    // The callback function for the death timer
+    function DoDeath(ball) {
+      if (ball && ball.deathTimer) {
+        ball.SetState("buried");
+        d3.select("#" + ball.id).remove();
+      }
+    }
+    
+    // The callback function for the critical timer
+    function DoCritical(ball) {
+      if (ball && ball.criticalTimer) {
+        critBalls.push(ball);
+        ball.speedFactor = 0.3;
+        ball.color = color_critical;
+        d3.select("#" + ball.id).style("fill", ball.color);
+      }
+    }
+
+    // Input functions
+    function SetRecoveryTime() {
+      recoveryTime = recoveryTimeSelectorObj.value;
+      recoveryTimeLabel.innerHTML = recoveryTime;
+    }
+    function SetCriticalCaseRate() {
+      criticalCaseRate = criticalCaseRateSelectorObj.value;
+      criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
+    }
+    function SetCriticalDeathRate() {
+      criticalDeathRate = criticalDeathRateSelectorObj.value;
+      criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
+    }
+    function SetIcuCapacity() {
+      icuCapacity = icuCapacitySelectorObj.value;
+      icuCapacityLabelObj.innerHTML = icuCapacity;
+    }
+    function SetIcuDeathRate() {
+      icuDeathRate = icuDeathRateSelectorObj.value;
+      icuDeathRateLabelObj.innerHTML = icuDeathRate;
+    }
+    function SetPopPercent() {
+      RI_PopPercent = popPercentSelectorObj.value;
+      popPercentLabelObj.innerHTML = RI_PopPercent;
+
+      let RI_TotalNew = Math.floor(RI_PopPercent*.01*balls.length);
+      
+      if (RI_TotalNew > RI_Total) {
+        for (let i = RI_Total; i < RI_TotalNew; i++) {
+          balls[i].speedFactor = 1 - (RI_SpeedReduction * .01);
+        }
+      }
+      else if (RI_TotalNew < RI_Total) {
+        for (let i = RI_TotalNew; i < RI_Total; i++) {
+          balls[i].speedFactor = 1;
+        }
+      }
+      
+      RI_Total = RI_TotalNew;
+    }
+    function SetSpeedReduction() {
+      RI_SpeedReduction = speedReductionSelectorObj.value;
+      speedReductionLabelObj.innerHTML = RI_SpeedReduction;
+
+      for (let i = 0; i < RI_Total; i++) {
+        balls[i].speedFactor = 1 - (RI_SpeedReduction * .01);
+      }
+    }
+</script>
+
+<div id="mainDiv">
+    <div id="upperBox">
+        <div id="drawArea"></div>
+        <div id="inputPanel">
+
+          <button class="button" id="startButton" onclick="StartSim()" style="width:100%;">Start Sim</button>
+          <!--<button class="button" id="startPause" onclick="PauseSim()" style="width:50%; float:left;" disabled=true>Pause</button>-->
+          <button class="button" id="stopButton" onclick="StopSim()" style="width:100%;" disabled=true>End Sim</button>
+          
+          <div class="attributeGroup">
+            <div class="groupHeading">Population Attributes</div>
+            <div class="inputItem">Speed:
+              <select id='speedSelector'">
+                  <option value="0.3">Slowest</option>
+                  <option value="0.5" selected="selected">Slow</option>
+                  <option value="1">Medium</option>
+                  <option value="2">Fast</option>
+              </select>
+            </div>
+            <div class="inputItem">Population: 
+              <select id='populationSelector'>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="150">150</option>
+                  <option value="200" selected="selected">200</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="attributeGroup">
+            <div class="groupHeading">Contagion Attributes</div>
+            <div class="inputItem">Recovery Time:
+              <input type="range" class="slider" id="recoveryTimeSelector" min="1" max="15" value="8" step="1" onchange="SetRecoveryTime()"
+                oninput="recoveryTimeLabelObj.innerHTML = recoveryTimeSelectorObj.value;">
+              <label id="recoveryTimeLabel" for="recoveryTimeSelector">8</label>
+            </div>
+            <div class="inputItem">Critical Case Rate:
+              <input type="range" class="slider" id="criticalCaseRateSelector" min="0" max="1" value="0.15" step="0.05" onchange="SetCriticalCaseRate()"
+                oninput="criticalCaseRateLabelObj.innerHTML = criticalCaseRateSelectorObj.value;">
+              <label id="criticalCaseRateLabel" for="criticalCaseRateSelector">0.15</label>
+            </div>
+            <div class="inputItem">Death Rate (no icu):
+              <input type="range" class="slider" id="criticalDeathRateSelector" min="0" max="1" value="0.5" step="0.05" onchange="SetCriticalDeathRate()"
+                oninput="criticalDeathRateLabelObj.innerHTML = criticalDeathRateSelectorObj.value;">
+              <label id="criticalDeathRateLabel" for="criticalDeathRateSelector">0.5</label>
+            </div>
+          </div>
+          
+          <div class="attributeGroup">
+            <div class="groupHeading">Hospital Attributes</div>
+            <div class="inputItem">ICU Capacity:
+              <input type="range" class="slider" id="icuCapacitySelector" min="0" max="20" value="1" step="1" onchange="SetIcuCapacity()"
+                oninput="icuCapacityLabelObj.innerHTML = icuCapacitySelectorObj.value;">
+              <label id="icuCapacityLabel" for="icuCapacitySelector">1</label>
+            </div>
+            <div class="inputItem">Death Rate (with icu):
+              <input type="range" class="slider" id="icuDeathRateSelector" min="0" max="1" value="0.05" step="0.05" onchange="SetIcuDeathRate()"
+                oninput="icuDeathRateLabelObj.innerHTML = icuDeathRateSelectorObj.value;">
+              <label id="icuDeathRateLabel" for="icuDeathRateSelector">0.05</label>
+            </div>
+          </div>
+          
+          <div class="attributeGroup">
+            <div class="groupHeading">Reduce Interaction</div>
+            <div class="inputItem">Population Percent:
+              <input type="range" class="slider" id="popPercentSelector" min="0" max="100" value="0" step="5" onchange="SetPopPercent()"
+                oninput="popPercentLabelObj.innerHTML = popPercentSelectorObj.value;">
+              <label id="popPercentLabel" for="popPercentSelector">0</label>
+            </div>
+            <div class="inputItem">Speed Reduction:
+              <input type="range" class="slider" id="speedReductionSelector" min="30" max="100" value="50" step="10" onchange="SetSpeedReduction()"
+                oninput="speedReductionLabelObj.innerHTML = speedReductionSelectorObj.value;">
+              <label id="speedReductionLabel" for="speedReductionSelector">50</label>
+            </div>
+          </div>
+          
+        </div>
+    </div>
+    <div id="statBox">
+      <div id="textPanel">
+        <div class="attributeGroup">
+          <div class="statItem">Healthy: <span id="healthyCount">0</span></div>
+          <div class="statItem" style="margin-top: 8px">Infected: <span id="infectedCount">0</span></div>
+          <div class="statItem" style="margin-top: 8px">Recovered: <span id="recoveredCount">0</span></div>
+          <div class="statItem" style="margin-top: 8px">Deaths: <span id="deathCount">0</span></div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+    // Functions for updating stats
+    var healthyCountObj = document.getElementById("healthyCount");
+    var infectedCountObj = document.getElementById("infectedCount");
+    var recoveredCountObj = document.getElementById("recoveredCount");
+    var deathCountObj = document.getElementById("deathCount");
+    
+    function DecrementHealthy() {
+      healthyCount--;
+      healthyCountObj.innerHTML = healthyCount;
+    }
+    function IncrementInfected() {
+      infectedCount++;
+      infectedCountObj.innerHTML = infectedCount;
+      DecrementHealthy();
+    }
+    function DecrementInfected() {
+      infectedCount--;
+      infectedCountObj.innerHTML = infectedCount;
+      if (infectedCount <= 0) StopSim();
+    }
+    function IncrementRecovered() {
+      recoveredCount++;
+      recoveredCountObj.innerHTML = recoveredCount;
+      DecrementInfected();
+    }
+    function IncrementDeaths() {
+      deathCount++;
+      deathCountObj.innerHTML = deathCount;
+      DecrementInfected();
+    }
+
+    // Initialize inputs
+    var recoveryTimeSelectorObj = document.getElementById('recoveryTimeSelector');
+    var recoveryTimeLabelObj = document.getElementById('recoveryTimeLabel');
+    var criticalCaseRateSelectorObj = document.getElementById('criticalCaseRateSelector');
+    var criticalCaseRateLabelObj = document.getElementById('criticalCaseRateLabel');
+    var criticalDeathRateSelectorObj = document.getElementById('criticalDeathRateSelector');
+    var criticalDeathRateLabelObj = document.getElementById('criticalDeathRateLabel');
+    var icuCapacitySelectorObj = document.getElementById('icuCapacitySelector');
+    var icuCapacityLabelObj = document.getElementById('icuCapacityLabel');
+    var icuDeathRateSelectorObj = document.getElementById('icuDeathRateSelector');
+    var icuDeathRateLabelObj = document.getElementById('icuDeathRateLabel');
+    var popPercentSelectorObj = document.getElementById('popPercentSelector');
+    var popPercentLabelObj = document.getElementById('popPercentLabel');
+    var speedReductionSelectorObj = document.getElementById('speedReductionSelector');
+    var speedReductionLabelObj = document.getElementById('speedReductionLabel');
+    recoveryTimeSelectorObj.value = recoveryTime;
+    recoveryTimeLabelObj.innerHTML = recoveryTime;
+    criticalCaseRateSelectorObj.value = criticalCaseRate;
+    criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
+    criticalDeathRateSelectorObj.value = criticalDeathRate;
+    criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
+    icuCapacitySelectorObj.value = icuCapacity;
+    icuCapacityLabelObj.innerHTML = icuCapacity;
+    icuDeathRateSelectorObj.value = icuDeathRate;
+    icuDeathRateLabelObj.innerHTML = icuDeathRate;
+    popPercentSelectorObj.value = RI_PopPercent;
+    popPercentLabelObj.innerHTML = RI_PopPercent;
+    speedReductionSelectorObj.value = RI_SpeedReduction;
+    speedReductionLabelObj.innerHTML = RI_SpeedReduction;
+
+    // Initialize
+    var svg = Initialize('drawArea');
+    SetTotalPopulation();
+</script>
+
+</body>
+</html>
