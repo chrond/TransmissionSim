@@ -529,7 +529,6 @@
         if (ball.critical) {
           for (let i = 0; i < critBalls.length; i++) {
             if (critBalls[i] === ball) {
-              ball.critical = false;
               critBalls.splice(i,1);
               DecrementCritical();
             }
@@ -539,7 +538,6 @@
         if (ball.icu) {
           for (let i = 0; i < icuBalls.length; i++) {
             if (icuBalls[i] === ball) {
-              ball.icu = false;
               icuBalls.splice(i,1);
               DecrementIcu();
               DecrementCritical();
@@ -556,6 +554,9 @@
         else {
           ball.SetState("recovered");
         }
+        
+        if (ball.critical) ball.critical = false;
+        if (ball.icu) ball.icu = false;
       }
     }
     
