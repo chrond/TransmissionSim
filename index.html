@@ -49,6 +49,9 @@
     var deathCount = 0;
     var criticalCount = 0;
     var icuCount = 0;
+    var secondsElapsed = 0;
+    var chartData = [[],[],[],[]];
+    var chartDataTimer = null;
 
     // Ball object
     function Ball(svg, id, x, y, state, angle, radius, speed, highRisk) {
@@ -437,6 +440,8 @@
         deathCountObj.innerHTML = deathCount;
         criticalCountObj.innerHTML = criticalCount;
         icuCountObj.innerHTML = icuCount;
+        secondsElapsed = 0;
+        ResetChart();
         
         //Initialize interaction reduction
         RI_Total = 0;
@@ -447,6 +452,9 @@
         
         //Start the sim
         StartPauseSim();
+        
+        chartDataTimer = d3.interval(UpdateChart, 1000);
+        
         //document.getElementById('startPause').disabled = false;
         document.getElementById('stopButton').disabled = false;
       }
@@ -469,6 +477,7 @@
       
       // Clear existing timers
       if (simEndTimer) simEndTimer.stop();
+      if (chartDataTimer) chartDataTimer.stop();
       for (let i = 0; i < balls.length; i++) {
         if (balls[i].infectionTimer)
           balls[i].infectionTimer.stop();
@@ -477,6 +486,9 @@
         if (balls[i].criticalTimer)
           balls[i].criticalTimer.stop();
       }
+
+      DrawChart();
+      
       document.getElementById('startButton').disabled = false;
       document.getElementById('speedSelector').disabled = false;
       document.getElementById('populationSelector').disabled = false;
@@ -615,6 +627,97 @@
         balls[i].speedFactor = 1 - (RI_SpeedReduction * .01);
       }
     }
+
+    //******** Chart Functions ********//
+
+    var chartWidth, chartHeight;
+    var chartInnerWidth, chartInnerHeight;
+    var chartMargin = {top: 10, right: 30, bottom: 30, left: 60};
+    var chartXAxis = null;
+    var chartYAxis = null;
+
+    function ResetChart() {
+      chartData = [[],[],[],[]];
+      chartData[0].color = color_dead;
+      chartData[1].color = color_infected;
+      chartData[2].color = color_initial;
+      chartData[3].color = color_recovered;
+      
+      // Remove all components from the chart
+      if (chartXAxis) chartXAxis.remove();
+      if (chartYAxis) chartYAxis.remove();
+      chartSvg.selectAll("path").remove();
+    }
+
+    function UpdateChart() {
+      //chart data will have four layers stacked on top of each other
+      chartData[0].push([secondsElapsed, 0, deathCount]);
+      let infectedPos = deathCount + infectedCount;
+      chartData[1].push([secondsElapsed, deathCount, infectedPos]);
+      let healthyPos = infectedPos + healthyCount;
+      chartData[2].push([secondsElapsed, infectedPos, healthyPos]);
+      let recoveredPos = healthyPos + recoveredCount;
+      chartData[3].push([secondsElapsed, healthyPos, recoveredPos]);
+
+      secondsElapsed++;
+    }
+
+    function InitializeChart(containerId) {
+      chartHeight = document.getElementById(containerId).clientHeight;
+      chartWidth = document.getElementById(containerId).clientWidth;
+      
+      chartInnerHeight = chartHeight - chartMargin.top - chartMargin.bottom;
+      chartInnerWidth = chartWidth - chartMargin.left - chartMargin.right;
+      
+      let svg = d3.select("#" + containerId)
+        .append("svg")
+        .attr("width", chartWidth)
+        .attr("height", chartHeight)
+        .append("g")
+        .attr("transform",
+              "translate(" + chartMargin.left + "," + chartMargin.top + ")");
+      ;
+
+      return svg;
+    }
+
+    function DrawChart() {
+      let po = document.getElementById('populationSelector');
+      let totalPopulation = po.options[po.selectedIndex].value;
+      
+      let xAxisScale = d3.scaleLinear()
+        .domain([0, secondsElapsed])
+        .range([0, chartInnerWidth]);
+
+      let yAxisScale = d3.scaleLinear()
+        .domain([0, totalPopulation])
+        .range([chartInnerHeight, 0]);
+
+      let chartArea = d3.area()
+        .x(function(d, i) { return xAxisScale(d[0]); })
+        .y0(function(d) { return yAxisScale(d[1]); })
+        .y1(function(d) { return yAxisScale(d[2]); });
+
+      // Show the area
+      chartSvg.selectAll("chartLayer")
+        .data(chartData) //For each of the four arrays in chartData
+        .join( enter =>
+          enter.append("path") //Add a path
+          .style("fill", function(d) { return d.color; })
+          .attr("d", chartArea)
+        );
+        
+      // Add X axis
+      chartXAxis = chartSvg.append("g")
+        .attr("transform", "translate(0," + chartInnerHeight + ")")
+        .call(d3.axisBottom(xAxisScale).ticks(5));
+        
+      // Add Y axis
+      chartYAxis = chartSvg.append("g")
+        .call(d3.axisLeft(yAxisScale));
+    }
+
+
 </script>
 
 <div id="mainDiv">
@@ -794,9 +897,13 @@
     speedReductionSelectorObj.value = RI_SpeedReduction;
     speedReductionLabelObj.innerHTML = RI_SpeedReduction;
 
-    // Initialize
+    // Initialize Simulation
     var svg = Initialize('drawArea');
     SetTotalPopulation();
+    
+    // Initialize Chart
+    var chartSvg = InitializeChart('graphArea');
+    ResetChart();
 </script>
 
 </body>
