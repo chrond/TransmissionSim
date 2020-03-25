@@ -32,7 +32,7 @@ var simEndTimer = null;
 // Contagion
 var recoveryTime = 8;
 var criticalCaseRate = 0.15; // chance for each infection to become a critical case
-var criticalDeathRate = 0.75; // death rate for critical cases that do NOT get intensive care
+var criticalDeathRate = 0.90; // death rate for critical cases that do NOT get intensive care
 
 // Hospital
 var icuCapacity = 1; // 0 to 20
@@ -764,9 +764,9 @@ function DrawChart() {
           <label id="criticalCaseRateLabel" for="criticalCaseRateSelector">0.15</label>
         </div>
         <div class="inputItem">Death Rate (no icu):
-          <input type="range" class="slider" id="criticalDeathRateSelector" min="0" max="1" value="0.75" step="0.05" onchange="SetCriticalDeathRate()"
+          <input type="range" class="slider" id="criticalDeathRateSelector" min="0" max="1" value="0.90" step="0.05" onchange="SetCriticalDeathRate()"
             oninput="criticalDeathRateLabelObj.innerHTML = criticalDeathRateSelectorObj.value;">
-          <label id="criticalDeathRateLabel" for="criticalDeathRateSelector">0.75</label>
+          <label id="criticalDeathRateLabel" for="criticalDeathRateSelector">0.90</label>
         </div>
       </div>
       
