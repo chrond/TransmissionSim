@@ -719,6 +719,140 @@ function DrawChart() {
     .call(d3.axisLeft(yAxisScale));
 }
 
+////////////////////////////////////////////////////
+//////////// Working with HTML elements ////////////
+////////////////////////////////////////////////////
+
+// Stat elements
+var healthyCountObj
+var infectedCountObj
+var recoveredCountObj
+var deathCountObj
+var criticalCountObj
+var icuCountObj
+
+//Input elements
+var recoveryTimeSelectorObj
+var recoveryTimeLabelObj
+var criticalCaseRateSelectorObj 
+var criticalCaseRateLabelObj
+var criticalDeathRateSelectorObj
+var criticalDeathRateLabelObj
+var icuCapacitySelectorObj
+var icuCapacityLabelObj
+var icuDeathRateSelectorObj
+var icuDeathRateLabelObj
+var popPercentSelectorObj
+var popPercentLabelObj
+var speedReductionSelectorObj
+var speedReductionLabelObj
+
+//SVG elements
+var svg
+var chartSvg
+
+// Functions for updating stats
+function DecrementHealthy() {
+  healthyCount--;
+  healthyCountObj.innerHTML = healthyCount;
+}
+function IncrementInfected() {
+  infectedCount++;
+  infectedCountObj.innerHTML = infectedCount;
+  DecrementHealthy();
+}
+function DecrementInfected() {
+  infectedCount--;
+  infectedCountObj.innerHTML = infectedCount;
+  if (infectedCount <= 0) {
+    simEndTimer = d3.timeout(StopSim, 1000);
+  }
+}
+function IncrementRecovered() {
+  recoveredCount++;
+  recoveredCountObj.innerHTML = recoveredCount;
+  DecrementInfected();
+}
+function IncrementDeaths() {
+  deathCount++;
+  deathCountObj.innerHTML = deathCount;
+  DecrementInfected();
+}
+function IncrementCritical() {
+  criticalCount++;
+  criticalCountObj.innerHTML = criticalCount;
+}
+function DecrementCritical() {
+  criticalCount--;
+  criticalCountObj.innerHTML = criticalCount;
+}
+function IncrementIcu() {
+  icuCount++;
+  icuCountObj.innerHTML = icuCount;
+}
+function DecrementIcu() {
+  icuCount--;
+  icuCountObj.innerHTML = icuCount;
+}
+
+function init() {
+  // Initialize stat elements
+  healthyCountObj = document.getElementById("healthyCount");
+  infectedCountObj = document.getElementById("infectedCount");
+  recoveredCountObj = document.getElementById("recoveredCount");
+  deathCountObj = document.getElementById("deathCount");
+  criticalCountObj = document.getElementById("criticalCount");
+  icuCountObj = document.getElementById("icuCount");
+
+  // Initialize input elements
+  recoveryTimeSelectorObj = document.getElementById('recoveryTimeSelector');
+  recoveryTimeSelectorObj.value = recoveryTime;
+  recoveryTimeLabelObj = document.getElementById('recoveryTimeLabel');
+  recoveryTimeLabelObj.innerHTML = recoveryTime;
+  criticalCaseRateSelectorObj = document.getElementById('criticalCaseRateSelector');
+  criticalCaseRateSelectorObj.value = criticalCaseRate;
+  criticalCaseRateLabelObj = document.getElementById('criticalCaseRateLabel');
+  criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
+  criticalDeathRateSelectorObj = document.getElementById('criticalDeathRateSelector');
+  criticalDeathRateSelectorObj.value = criticalDeathRate;
+  criticalDeathRateLabelObj = document.getElementById('criticalDeathRateLabel');
+  criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
+  icuCapacitySelectorObj = document.getElementById('icuCapacitySelector');
+  icuCapacitySelectorObj.value = icuCapacity;
+  icuCapacityLabelObj = document.getElementById('icuCapacityLabel');
+  icuCapacityLabelObj.innerHTML = icuCapacity;
+  icuDeathRateSelectorObj = document.getElementById('icuDeathRateSelector');
+  icuDeathRateSelectorObj.value = icuDeathRate;
+  icuDeathRateLabelObj = document.getElementById('icuDeathRateLabel');
+  icuDeathRateLabelObj.innerHTML = icuDeathRate;
+  popPercentSelectorObj = document.getElementById('popPercentSelector');
+  popPercentSelectorObj.value = RI_PopPercent;
+  popPercentLabelObj = document.getElementById('popPercentLabel');
+  popPercentLabelObj.innerHTML = RI_PopPercent;
+  speedReductionSelectorObj = document.getElementById('speedReductionSelector');
+  speedReductionSelectorObj.value = RI_SpeedReduction;
+  speedReductionLabelObj = document.getElementById('speedReductionLabel');
+  speedReductionLabelObj.innerHTML = RI_SpeedReduction;
+
+  // Initialize Simulation
+  svg = Initialize('drawArea');
+  SetTotalPopulation();
+
+  // Initialize Chart
+  chartSvg = InitializeChart('graphArea');
+  ResetChart();
+}
+
+// Do initialization when document loads
+if (document.readyState === 'complete') {
+  init();
+}
+else {
+  window.onload = function() {
+    init();
+  }
+}
+
 </script>
 
 <div id="mainDiv">
@@ -815,99 +949,6 @@ function DrawChart() {
     </div><div id="graphArea"></div>
   </div>
 </div>
-
-<script>
-
-// Functions for updating stats
-var healthyCountObj = document.getElementById("healthyCount");
-var infectedCountObj = document.getElementById("infectedCount");
-var recoveredCountObj = document.getElementById("recoveredCount");
-var deathCountObj = document.getElementById("deathCount");
-var criticalCountObj = document.getElementById("criticalCount");
-var icuCountObj = document.getElementById("icuCount");
-
-function DecrementHealthy() {
-  healthyCount--;
-  healthyCountObj.innerHTML = healthyCount;
-}
-function IncrementInfected() {
-  infectedCount++;
-  infectedCountObj.innerHTML = infectedCount;
-  DecrementHealthy();
-}
-function DecrementInfected() {
-  infectedCount--;
-  infectedCountObj.innerHTML = infectedCount;
-  if (infectedCount <= 0) {
-    simEndTimer = d3.timeout(StopSim, 1000);
-  }
-}
-function IncrementRecovered() {
-  recoveredCount++;
-  recoveredCountObj.innerHTML = recoveredCount;
-  DecrementInfected();
-}
-function IncrementDeaths() {
-  deathCount++;
-  deathCountObj.innerHTML = deathCount;
-  DecrementInfected();
-}
-function IncrementCritical() {
-  criticalCount++;
-  criticalCountObj.innerHTML = criticalCount;
-}
-function DecrementCritical() {
-  criticalCount--;
-  criticalCountObj.innerHTML = criticalCount;
-}
-function IncrementIcu() {
-  icuCount++;
-  icuCountObj.innerHTML = icuCount;
-}
-function DecrementIcu() {
-  icuCount--;
-  icuCountObj.innerHTML = icuCount;
-}
-
-// Initialize inputs
-var recoveryTimeSelectorObj = document.getElementById('recoveryTimeSelector');
-var recoveryTimeLabelObj = document.getElementById('recoveryTimeLabel');
-var criticalCaseRateSelectorObj = document.getElementById('criticalCaseRateSelector');
-var criticalCaseRateLabelObj = document.getElementById('criticalCaseRateLabel');
-var criticalDeathRateSelectorObj = document.getElementById('criticalDeathRateSelector');
-var criticalDeathRateLabelObj = document.getElementById('criticalDeathRateLabel');
-var icuCapacitySelectorObj = document.getElementById('icuCapacitySelector');
-var icuCapacityLabelObj = document.getElementById('icuCapacityLabel');
-var icuDeathRateSelectorObj = document.getElementById('icuDeathRateSelector');
-var icuDeathRateLabelObj = document.getElementById('icuDeathRateLabel');
-var popPercentSelectorObj = document.getElementById('popPercentSelector');
-var popPercentLabelObj = document.getElementById('popPercentLabel');
-var speedReductionSelectorObj = document.getElementById('speedReductionSelector');
-var speedReductionLabelObj = document.getElementById('speedReductionLabel');
-recoveryTimeSelectorObj.value = recoveryTime;
-recoveryTimeLabelObj.innerHTML = recoveryTime;
-criticalCaseRateSelectorObj.value = criticalCaseRate;
-criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
-criticalDeathRateSelectorObj.value = criticalDeathRate;
-criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
-icuCapacitySelectorObj.value = icuCapacity;
-icuCapacityLabelObj.innerHTML = icuCapacity;
-icuDeathRateSelectorObj.value = icuDeathRate;
-icuDeathRateLabelObj.innerHTML = icuDeathRate;
-popPercentSelectorObj.value = RI_PopPercent;
-popPercentLabelObj.innerHTML = RI_PopPercent;
-speedReductionSelectorObj.value = RI_SpeedReduction;
-speedReductionLabelObj.innerHTML = RI_SpeedReduction;
-
-// Initialize Simulation
-var svg = Initialize('drawArea');
-SetTotalPopulation();
-
-// Initialize Chart
-var chartSvg = InitializeChart('graphArea');
-ResetChart();
-
-</script>
 
 </body>
 </html>
