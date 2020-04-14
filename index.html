@@ -14,7 +14,7 @@ var balls = []; // array for ball objects
 var critBalls = []; // array for balls in critical condition (waiting for icu)
 var icuBalls = []; // array for balls in intensive care (in icu)
 
-var radius_default = 3;
+var radius_default = 4;
 
 var color_initial = 'rgb(90,160,255)';
 var color_infected = 'rgb(180,100,60)';
@@ -25,7 +25,7 @@ var color_dead = 'rgb(60,30,60)';
 
 var simInProgress = false;
 var startPauseFlag = null;
-var simEndTimer = null;
+var simEndTimerId = null;
 
 // Contagion
 var recoveryTime = 8;
@@ -50,7 +50,12 @@ var criticalCount = 0;
 var icuCount = 0;
 var secondsElapsed = 0;
 var chartData = [[],[],[],[]];
-var chartDataTimer = null;
+var chartDataTimerId = null;
+
+// The task scheduler for the main game loop
+var fps = 60;
+var gameLoopInterval = Math.floor(1000/fps);
+var taskScheduler;
 
 // Ball object
 function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, highRisk) {
@@ -64,9 +69,9 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
   this.id = id; // id of ball
   this.angle = angle; // initial angle of movement in radians
   this.color = color_initial;
-  this.infectionTimer = null;
-  this.deathTimer = null;
-  this.criticalTimer = null;
+  this.infectionTimerId = null;
+  this.deathTimerId = null;
+  this.criticalTimerId = null;
   this.speedFactor = 1; // dynamically changing speed factor for interaction reduction
   this.critical = false;
   this.icu = false;
@@ -114,25 +119,34 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
     
     // if infected, start recovery timer
     if (this.state == "infected") {
-      this.infectionTimer = d3.timeout(
-        DoRecover.bind(this,this), //bind to this context, and pass this as an argument
-        recoveryTime*1000
+      this.infectionTimerId = taskScheduler.add(
+        DoRecover,
+        recoveryTime*1000,
+        false, //run once
+        this, //bind to this context
+        [this] //pass this as an argument
       );
       
       // if high risk, start critical timer
       if (this.highRisk) {
-        this.criticalTimer = d3.timeout(
-          DoCritical.bind(this,this), //bind to this context, and pass this as an argument
-          recoveryTime*500
+        this.criticalTimerId = taskScheduler.add(
+          DoCritical,
+          recoveryTime*500,
+          false, //run once
+          this, //bind to this context
+          [this] //pass this as an argument
         );
       }
     }
     
     // if dead, start death timer
     if (this.state == "dead") {
-      this.deathTimer = d3.timeout(
-        DoDeath.bind(this,this), //bind to this context, and pass this as an argument
-        500
+      this.deathTimerId = taskScheduler.add(
+        DoDeath,
+        500,
+        false, //run once
+        this, //bind to this context
+        [this] //pass this as an argument
       );
     }
   }
@@ -256,33 +270,42 @@ function ProcessCollision(b1, b2) {
   }
 }
 
+
+function CoreSimLoop() {
+  ManageICU();
+  for (let i = 0; i < balls.length; i++) {
+    balls[i].Move();
+    for (let j = i + 1; j < balls.length; j++) {
+      ProcessCollision(i, j);
+    }
+  }
+  
+  //Draw to canvas
+  canvasContext.fillStyle = 'white';
+  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < balls.length; i++) {
+    balls[i].Draw();
+  }
+}
+
+/*
 function StartPauseSim() {
   if (startPauseFlag == null) {
     startPauseFlag = 1;
     
-    let t = d3.timer(function () {
-      ManageICU();
-      for (let i = 0; i < balls.length; i++) {
-        balls[i].Move();
-        for (let j = i + 1; j < balls.length; j++) {
-          ProcessCollision(i, j);
-        }
-      }
-      
-      //Draw to canvas
-      canvasContext.fillStyle = 'white';
-      canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < balls.length; i++) {
-        balls[i].Draw();
-      }
-      
-      if (startPauseFlag == null) t.stop();
-    }, 500);
+    taskScheduler.start();
+    
+    taskScheduler.add(
+      CoreLoop,
+      500,
+      true
+    );
   }
   else {
     startPauseFlag = null;
   }
 }
+*/
 
 //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
 function shuffle(array) {
@@ -306,13 +329,9 @@ function shuffle(array) {
 
 function SetTotalPopulation() {
   // Clear existing timers
+  taskScheduler.clear();
+  
   for (let i = 0; i < balls.length; i++) {
-    if (balls[i].infectionTimer)
-      balls[i].infectionTimer.stop();
-    if (balls[i].deathTimer)
-      balls[i].deathTimer.stop();
-    if (balls[i].criticalTimer)
-      balls[i].criticalTimer.stop();
     balls[i] = null;
   }
   
@@ -373,7 +392,10 @@ function SetTotalPopulation() {
 function StartSim() {
   if (simInProgress && startPauseFlag == null) { //Start from paused
     document.getElementById('startButton').disabled = true;
-    StartPauseSim();
+    
+    startPauseFlag = 1;
+    taskScheduler.start();
+    
     //document.getElementById('startPause').disabled = false;
     document.getElementById('stopButton').disabled = false;
   }
@@ -412,10 +434,11 @@ function StartSim() {
     //Infect a ball
     balls[Math.floor(Math.random() * balls.length)].SetState("infected");
     
-    //Start the sim
-    StartPauseSim();
+    chartDataTimerId = taskScheduler.add(UpdateChart, 1000, true);
     
-    chartDataTimer = d3.interval(UpdateChart, 1000);
+    //Start the sim
+    taskScheduler.start();
+    
     
     //document.getElementById('startPause').disabled = false;
     document.getElementById('stopButton').disabled = false;
@@ -425,7 +448,10 @@ function StartSim() {
 function PauseSim() {
   if (simInProgress && startPauseFlag != null) {
     //document.getElementById('startPause').disabled = true;
-    StartPauseSim();
+
+    startPauseFlag = null;
+    taskScheduler.stop();
+    
     document.getElementById('startButton').disabled = false;
   }
 }
@@ -433,21 +459,10 @@ function PauseSim() {
 function StopSim() {
   document.getElementById('stopButton').disabled = true;
   //document.getElementById('startPause').disabled = true;
-  startPauseFlag = null; // animation will stop
+  startPauseFlag = null;
+  taskScheduler.stop();
   
   simInProgress = false;
-  
-  // Clear existing timers
-  if (simEndTimer) simEndTimer.stop();
-  if (chartDataTimer) chartDataTimer.stop();
-  for (let i = 0; i < balls.length; i++) {
-    if (balls[i].infectionTimer)
-      balls[i].infectionTimer.stop();
-    if (balls[i].deathTimer)
-      balls[i].deathTimer.stop();
-    if (balls[i].criticalTimer)
-      balls[i].criticalTimer.stop();
-  }
 
   DrawChart();
   
@@ -464,11 +479,14 @@ function ManageICU() {
     let ball = critBalls[0];
     
     //when ball enters icu, stop the existing infectionTimer and create a new one for 40% the normal recovery time
-    if (ball.infectionTimer) {
-      ball.infectionTimer.stop()
-      ball.infectionTimer = d3.timeout(
-        DoRecover.bind(ball,ball), //bind to ball context, and pass ball as an argument
-        recoveryTime*400
+    if (ball.infectionTimerId) {
+      taskScheduler.remove(ball.infectionTimerId);
+      ball.infectionTimer = taskScheduler.add(
+        DoRecover,
+        recoveryTime*400,
+        false,
+        ball,
+        [ball]
       );
     }
     
@@ -485,7 +503,7 @@ function ManageICU() {
 
 // The callback function for the infection timer
 function DoRecover(ball) {
-  if (ball && ball.infectionTimer) {
+  if (ball && ball.infectionTimerId) {
     
     // Remove from critical array
     if (ball.critical) {
@@ -524,20 +542,18 @@ function DoRecover(ball) {
 
 // The callback function for the death timer
 function DoDeath(ball) {
-  if (ball && ball.deathTimer) {
+  if (ball && ball.deathTimerId) {
     ball.SetState("buried");
-    d3.select("#" + ball.id).remove();
   }
 }
 
 // The callback function for the critical timer
 function DoCritical(ball) {
-  if (ball && ball.criticalTimer) {
+  if (ball && ball.criticalTimerId) {
     critBalls.push(ball);
     ball.critical = true;
     //ball.speedFactor = ball.speedFactor * 0.3;
     ball.color = color_critical;
-    d3.select("#" + ball.id).style("fill", ball.color);
     IncrementCritical();
   }
 }
@@ -731,7 +747,7 @@ function DecrementInfected() {
   infectedCount--;
   infectedCountObj.innerHTML = infectedCount;
   if (infectedCount <= 0) {
-    simEndTimer = d3.timeout(StopSim, 1000);
+    simEndTimerId = taskScheduler.add(StopSim, 1000, false);
   }
 }
 function IncrementRecovered() {
@@ -800,6 +816,9 @@ function init() {
   speedReductionLabelObj = document.getElementById('speedReductionLabel');
   speedReductionLabelObj.innerHTML = RI_SpeedReduction;
 
+  // Initialize the scheduler
+  taskScheduler = new Scheduler(gameLoopInterval, CoreSimLoop);
+  
   // Initialize canvas
   canvas = document.getElementById('drawArea');
   canvas.height = canvas.clientHeight;
@@ -828,6 +847,106 @@ else {
   }
 }
 
+
+
+
+
+///////////////////////////////////
+//////////// Scheduler ////////////
+///////////////////////////////////
+
+function Scheduler(loopInterval, coreFunction) {
+  let tasks = [];
+  let mainLoopInterval = loopInterval;
+  let intervalId = null;
+  let taskId = BigInt(0);
+  
+  let schedule = function () {
+    for(let i=0; i < tasks.length; i++) {
+      // Decrement the timer for the task
+      tasks[i].remainingMs -= mainLoopInterval;
+      
+      // Check if the time for this task is up
+      if(tasks[i].remainingMs < 0) {
+        // Call the task function
+        tasks[i].callback.apply(tasks[i].context, tasks[i].arguments);
+        
+        if(tasks[i].repeat) {
+          // If this is a repeating task, reset the time remaining
+          tasks[i].remainingMs = tasks[i].intervalMs;
+        }
+        else {
+          // If this is not a repeating task, remove it from the array
+          tasks.splice(i, 1);
+        }
+      }
+    }
+    
+    // Execute core function after all other tasks
+    if(typeof coreFunction === 'function') {
+      coreFunction();
+    }
+  };
+  
+  let output = {
+    // Add task
+    add: function (callback, intervalMs, repeat, context, arguments) {
+      let ms = parseInt(intervalMs);
+      context = ((context && typeof context === 'object') ? context : null);
+      taskId = taskId + 1n;
+      
+      if(typeof callback === 'function' && !isNaN(ms) && ms > 0) {
+        tasks.push({
+          taskId: taskId,
+          callback: callback,
+          intervalMs: ms,
+          remainingMs: ms,
+          repeat: repeat,
+          context: context,
+          arguments: arguments
+        });
+      }
+
+      return taskId;
+    },
+    // Remove task
+    remove: function (taskId) {
+      for(let i=0; i < tasks.length; i++) {
+        if(tasks[i].taskId === taskId) {
+          tasks.splice(i, 1);
+          return;
+        }
+      }
+    },
+    // Stop scheduler
+    stop: function () {
+      if(intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    },
+    // Start scheduler
+    start: function () {
+      if(!intervalId) {
+        intervalId = setInterval(schedule, mainLoopInterval);
+      }
+    },
+    // Clear scheduler
+    clear: function () {
+      stop();
+      
+      for(let i=0; i < tasks.length; i++) {
+        tasks[i] = null;
+      }
+      
+      tasks.length = 0;
+    }
+  };
+
+  return output;
+}
+
+
 </script>
 
 <div id="mainDiv">
@@ -845,14 +964,13 @@ else {
         <div class="inputItem">Speed:
           <select id='speedSelector'">
               <option value="0.3">Slowest</option>
-              <option value="0.5" selected="selected">Slow</option>
-              <option value="1">Medium</option>
+              <option value="0.5">Slow</option>
+              <option value="1" selected="selected">Medium</option>
               <option value="2">Fast</option>
           </select>
         </div>
         <div class="inputItem">Population: 
           <select id='populationSelector'>
-              <option value="50">50</option>
               <option value="100">100</option>
               <option value="150">150</option>
               <option value="500" selected="selected">500</option>
