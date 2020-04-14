@@ -607,9 +607,9 @@ function SetSpeedReduction() {
   }
 }
 
-//*********************************//
-//******** Chart Functions ********//
-//*********************************//
+/////////////////////////////////////
+////////// Chart Functions //////////
+/////////////////////////////////////
 
 var chartWidth, chartHeight;
 var chartInnerWidth, chartInnerHeight;
@@ -871,6 +871,9 @@ function Scheduler(loopInterval, coreFunction) {
         // Call the task function
         tasks[i].callback.apply(tasks[i].context, tasks[i].arguments);
         
+        // If the callback cleared the scheduler, quit here
+        if (i >= tasks.length) break;
+        
         if(tasks[i].repeat) {
           // If this is a repeating task, reset the time remaining
           tasks[i].remainingMs = tasks[i].intervalMs;
@@ -895,7 +898,7 @@ function Scheduler(loopInterval, coreFunction) {
       context = ((context && typeof context === 'object') ? context : null);
       taskId = taskId + 1n;
       
-      if(typeof callback === 'function' && !isNaN(ms) && ms > 0) {
+      if (typeof callback === 'function' && !isNaN(ms) && ms > 0) {
         tasks.push({
           taskId: taskId,
           callback: callback,
@@ -911,8 +914,8 @@ function Scheduler(loopInterval, coreFunction) {
     },
     // Remove task
     remove: function (taskId) {
-      for(let i=0; i < tasks.length; i++) {
-        if(tasks[i].taskId === taskId) {
+      for (let i=0; i < tasks.length; i++) {
+        if (tasks[i].taskId === taskId) {
           tasks.splice(i, 1);
           return;
         }
@@ -920,14 +923,14 @@ function Scheduler(loopInterval, coreFunction) {
     },
     // Stop scheduler
     stop: function () {
-      if(intervalId) {
+      if (intervalId) {
         clearInterval(intervalId);
         intervalId = null;
       }
     },
     // Start scheduler
     start: function () {
-      if(!intervalId) {
+      if (!intervalId) {
         intervalId = setInterval(schedule, mainLoopInterval);
       }
     },
@@ -935,7 +938,7 @@ function Scheduler(loopInterval, coreFunction) {
     clear: function () {
       stop();
       
-      for(let i=0; i < tasks.length; i++) {
+      for (let i=0; i < tasks.length; i++) {
         tasks[i] = null;
       }
       
