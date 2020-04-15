@@ -280,32 +280,17 @@ function CoreSimLoop() {
     }
   }
   
+  //let n1 = performance.now();
+  
   //Draw to canvas
   canvasContext.fillStyle = 'white';
   canvasContext.fillRect(0, 0, canvas.width, canvas.height);
   for (let i = 0; i < balls.length; i++) {
     balls[i].Draw();
   }
+  
+  //console.log(performance.now() - n1);
 }
-
-/*
-function StartPauseSim() {
-  if (startPauseFlag == null) {
-    startPauseFlag = 1;
-    
-    taskScheduler.start();
-    
-    taskScheduler.add(
-      CoreLoop,
-      500,
-      true
-    );
-  }
-  else {
-    startPauseFlag = null;
-  }
-}
-*/
 
 //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
 function shuffle(array) {
@@ -345,6 +330,11 @@ function SetTotalPopulation() {
   let so = document.getElementById('speedSelector');
   let speed = so.options[so.selectedIndex].value;
 
+  if (totalPopulation > 500)
+    radius_default = 3;
+  else
+    radius_default = 4;
+  
   // Determine initial ball locations
   let boundsArea = canvas.width * canvas.height;
   let ballSpace = boundsArea / totalPopulation;
@@ -823,7 +813,7 @@ function init() {
   canvas = document.getElementById('drawArea');
   canvas.height = canvas.clientHeight;
   canvas.width = canvas.clientWidth;
-  canvasContext = canvas.getContext('2d');
+  canvasContext = canvas.getContext('2d', { alpha: false });
   
   // Clear canvas
   canvasContext.fillStyle = 'white';
@@ -856,25 +846,30 @@ else {
 ///////////////////////////////////
 
 function Scheduler(loopInterval, coreFunction) {
+  let active = false;
   let tasks = [];
   let mainLoopInterval = loopInterval;
-  let intervalId = null;
+  let timerId = null;
   let taskId = BigInt(0);
   
   let schedule = function () {
-    for(let i=0; i < tasks.length; i++) {
+    let startTime = performance.now();
+    
+    for (let i=0; i < tasks.length; i++) {
+      if (!active) break;
+      
       // Decrement the timer for the task
       tasks[i].remainingMs -= mainLoopInterval;
       
       // Check if the time for this task is up
-      if(tasks[i].remainingMs < 0) {
+      if (tasks[i].remainingMs < 0) {
         // Call the task function
         tasks[i].callback.apply(tasks[i].context, tasks[i].arguments);
         
         // If the callback cleared the scheduler, quit here
         if (i >= tasks.length) break;
         
-        if(tasks[i].repeat) {
+        if (tasks[i].repeat) {
           // If this is a repeating task, reset the time remaining
           tasks[i].remainingMs = tasks[i].intervalMs;
         }
@@ -886,8 +881,14 @@ function Scheduler(loopInterval, coreFunction) {
     }
     
     // Execute core function after all other tasks
-    if(typeof coreFunction === 'function') {
+    if (typeof coreFunction === 'function') {
       coreFunction();
+    }
+    
+    // Schedule the next iteration
+    if (active) {
+      console.log(mainLoopInterval - (performance.now() - startTime));
+      timerId = setTimeout(schedule, Math.max(0, mainLoopInterval - (performance.now() - startTime)));
     }
   };
   
@@ -923,21 +924,24 @@ function Scheduler(loopInterval, coreFunction) {
     },
     // Stop scheduler
     stop: function () {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+      active = false;
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
       }
     },
     // Start scheduler
     start: function () {
-      if (!intervalId) {
-        intervalId = setInterval(schedule, mainLoopInterval);
+      active = true;
+      if (!timerId) {
+        timerId = setTimeout(schedule, mainLoopInterval);
       }
     },
     // Clear scheduler
     clear: function () {
       stop();
       
+      // Let the existing tasks be garbage collected
       for (let i=0; i < tasks.length; i++) {
         tasks[i] = null;
       }
@@ -975,8 +979,9 @@ function Scheduler(loopInterval, coreFunction) {
         <div class="inputItem">Population: 
           <select id='populationSelector'>
               <option value="100">100</option>
-              <option value="150">150</option>
+              <option value="300">300</option>
               <option value="500" selected="selected">500</option>
+              <option value="750">750</option>
               <option value="1000">1000</option>
           </select>
         </div>
