@@ -14,7 +14,7 @@ var balls = []; // array for ball objects
 var critBalls = []; // array for balls in critical condition (waiting for icu)
 var icuBalls = []; // array for balls in intensive care (in icu)
 
-var radius_default = 4;
+var ball_radius = 4;
 
 var color_initial = 'rgb(90,160,255)';
 var color_infected = 'rgb(180,100,60)';
@@ -22,6 +22,14 @@ var color_recovered = 'rgb(150,200,130)';
 var color_critical = 'rgb(255,0,0)';
 var color_icu = 'rgb(255,0,200)';
 var color_dead = 'rgb(60,30,60)';
+
+//Canvas images for each ball color
+var ball_initial;
+var ball_infected;
+var ball_recovered;
+var ball_critical;
+var ball_icu;
+var ball_dead;
 
 var simInProgress = false;
 var startPauseFlag = null;
@@ -79,7 +87,7 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
   if (!this.angle)
     this.angle = Math.PI / 7;
   if (!this.radius)
-    this.radius = radius_default;
+    this.radius = ball_radius;
   if (!this.state)
     this.state = "initial";
 
@@ -153,13 +161,33 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
   
   this.SetState(this.state); //set the color based on state
 
+  this.GetImage = function () {
+    let image = ball_initial;
+
+    if (this.color === color_infected)
+      image = ball_infected;
+    else if (this.color === color_recovered)
+      image = ball_recovered;
+    else if (this.color === color_critical)
+      image = ball_critical;
+    else if (this.color === color_icu)
+      image = ball_icu;
+    else if (this.color === color_dead)
+      image = ball_dead;
+
+    return image;
+  }
+
   this.Draw = function () {
     if (this.state != "buried") {
-      //draw the circle
+      // Draw the circle
       this.canvasContext.fillStyle = this.color;
       this.canvasContext.beginPath();
       this.canvasContext.arc(this.posX, this.posY, this.radius, 0, Math.PI*2, true);
       this.canvasContext.fill();
+      
+      // Draw the image
+      //this.canvasContext.drawImage(this.GetImage(), this.posX-ball_radius, this.posY-ball_radius);
     }
   }
 
@@ -312,7 +340,21 @@ function shuffle(array) {
   return array;
 }
 
-function SetTotalPopulation() {
+function CreateCircleImage(radius, color) {
+  let canvas = document.createElement('canvas');
+  canvas.width = radius*2;
+  canvas.height = radius*2;
+  let context = canvas.getContext('2d');
+  
+  context.fillStyle = color;
+  context.beginPath();
+  context.arc(radius, radius, radius, 0, Math.PI*2, true);
+  context.fill();
+  
+  return canvas;
+}
+
+function InitializeBalls() {
   // Clear existing timers
   taskScheduler.clear();
   
@@ -331,9 +373,17 @@ function SetTotalPopulation() {
   let speed = so.options[so.selectedIndex].value;
 
   if (totalPopulation > 500)
-    radius_default = 3;
+    ball_radius = 3;
   else
-    radius_default = 4;
+    ball_radius = 4;
+  
+  // Prepare ball images
+  //ball_initial = CreateCircleImage(ball_radius, color_initial);
+  //ball_infected = CreateCircleImage(ball_radius, color_infected);
+  //ball_recovered = CreateCircleImage(ball_radius, color_recovered);
+  //ball_critical = CreateCircleImage(ball_radius, color_critical);
+  //ball_icu = CreateCircleImage(ball_radius, color_icu);
+  //ball_dead = CreateCircleImage(ball_radius, color_dead);
   
   // Determine initial ball locations
   let boundsArea = canvas.width * canvas.height;
@@ -349,7 +399,7 @@ function SetTotalPopulation() {
       ballLength--;
     }
   }
-  while (areaCapacity < totalPopulation && ballLength > radius_default*2 + 1);
+  while (areaCapacity < totalPopulation && ballLength > ball_radius*2 + 1);
 
   // Expand height and width to fill the area
   let ballWidth = Math.floor(canvas.width / ballCountX);
@@ -364,7 +414,7 @@ function SetTotalPopulation() {
     let highRisk = Math.random() < criticalCaseRate;
     
     //Add ball
-    balls.push(new Ball(canvas, canvasContext, 'n'+(i+1).toString(), x, y, "initial", Math.random()*2*Math.PI, radius_default, speed, highRisk));
+    balls.push(new Ball(canvas, canvasContext, 'n'+(i+1).toString(), x, y, "initial", Math.random()*2*Math.PI, ball_radius, speed, highRisk));
     
     if (col == ballCountX-1) {
       row++;
@@ -399,7 +449,7 @@ function StartSim() {
     simInProgress = true;
     
     //Create the balls
-    SetTotalPopulation();
+    InitializeBalls();
     
     //Update stats
     healthyCount = balls.length;
@@ -820,7 +870,7 @@ function init() {
   canvasContext.fillRect(0, 0, canvas.width, canvas.height);
   
   // Initialize Simulation
-  SetTotalPopulation();
+  InitializeBalls();
 
   // Initialize Chart
   chartSvg = InitializeChart('graphArea');
@@ -887,7 +937,7 @@ function Scheduler(loopInterval, coreFunction) {
     
     // Schedule the next iteration
     if (active) {
-      console.log(mainLoopInterval - (performance.now() - startTime));
+      //console.log(mainLoopInterval - (performance.now() - startTime));
       timerId = setTimeout(schedule, Math.max(0, mainLoopInterval - (performance.now() - startTime)));
     }
   };
