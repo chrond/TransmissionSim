@@ -1,4 +1,9 @@
 
+// The task scheduler for the main game loop
+var fps = 60;
+var gameLoopInterval = Math.floor(1000/fps);
+var taskScheduler;
+
 var balls = []; // array for ball objects
 var critBalls = []; // array for balls in critical condition (waiting for icu)
 var icuBalls = []; // array for balls in intensive care (in icu)
@@ -12,7 +17,7 @@ var color_critical = 'rgb(255,0,0)';
 var color_icu = 'rgb(255,0,200)';
 var color_dead = 'rgb(60,30,60)';
 
-//Canvas images for each ball color
+// Canvas images for each ball color
 var ball_initial;
 var ball_infected;
 var ball_recovered;
@@ -49,11 +54,136 @@ var icuCount = 0;
 var chartDataTimerId = null;
 var chart;
 
-// The task scheduler for the main game loop
-var fps = 60;
-var gameLoopInterval = Math.floor(1000/fps);
-var taskScheduler;
+// Stat DOM elements
+var healthyCountObj
+var infectedCountObj
+var recoveredCountObj
+var deathCountObj
+var criticalCountObj
+var icuCountObj
 
+//Input DOM elements
+var recoveryTimeSelectorObj
+var recoveryTimeLabelObj
+var criticalCaseRateSelectorObj 
+var criticalCaseRateLabelObj
+var criticalDeathRateSelectorObj
+var criticalDeathRateLabelObj
+var icuCapacitySelectorObj
+var icuCapacityLabelObj
+var icuDeathRateSelectorObj
+var icuDeathRateLabelObj
+var popPercentSelectorObj
+var popPercentLabelObj
+var speedReductionSelectorObj
+var speedReductionLabelObj
+
+//Canvas and chart DOM elements
+var canvas;
+var canvasContext;
+var chartSvg
+
+
+/////////////////////////////////////
+//////////// Initialize /////////////
+/////////////////////////////////////
+
+// Do initialization when document loads
+if (document.readyState === 'complete') {
+  init();
+}
+else {
+  window.onload = function() {
+    init();
+  }
+}
+
+function init() {
+  // Initialize stat elements
+  healthyCountObj = document.getElementById("healthyCount");
+  infectedCountObj = document.getElementById("infectedCount");
+  recoveredCountObj = document.getElementById("recoveredCount");
+  deathCountObj = document.getElementById("deathCount");
+  criticalCountObj = document.getElementById("criticalCount");
+  icuCountObj = document.getElementById("icuCount");
+
+  // Initialize input elements
+  recoveryTimeSelectorObj = document.getElementById('recoveryTimeSelector');
+  recoveryTimeSelectorObj.value = recoveryTime;
+  recoveryTimeLabelObj = document.getElementById('recoveryTimeLabel');
+  recoveryTimeLabelObj.innerHTML = recoveryTime;
+  criticalCaseRateSelectorObj = document.getElementById('criticalCaseRateSelector');
+  criticalCaseRateSelectorObj.value = criticalCaseRate;
+  criticalCaseRateLabelObj = document.getElementById('criticalCaseRateLabel');
+  criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
+  criticalDeathRateSelectorObj = document.getElementById('criticalDeathRateSelector');
+  criticalDeathRateSelectorObj.value = criticalDeathRate;
+  criticalDeathRateLabelObj = document.getElementById('criticalDeathRateLabel');
+  criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
+  icuCapacitySelectorObj = document.getElementById('icuCapacitySelector');
+  icuCapacitySelectorObj.value = icuCapacity;
+  icuCapacityLabelObj = document.getElementById('icuCapacityLabel');
+  icuCapacityLabelObj.innerHTML = icuCapacity;
+  icuDeathRateSelectorObj = document.getElementById('icuDeathRateSelector');
+  icuDeathRateSelectorObj.value = icuDeathRate;
+  icuDeathRateLabelObj = document.getElementById('icuDeathRateLabel');
+  icuDeathRateLabelObj.innerHTML = icuDeathRate;
+  popPercentSelectorObj = document.getElementById('popPercentSelector');
+  popPercentSelectorObj.value = RI_PopPercent;
+  popPercentLabelObj = document.getElementById('popPercentLabel');
+  popPercentLabelObj.innerHTML = RI_PopPercent;
+  speedReductionSelectorObj = document.getElementById('speedReductionSelector');
+  speedReductionSelectorObj.value = RI_SpeedReduction;
+  speedReductionLabelObj = document.getElementById('speedReductionLabel');
+  speedReductionLabelObj.innerHTML = RI_SpeedReduction;
+
+  // Initialize the scheduler
+  taskScheduler = new Scheduler(gameLoopInterval, CoreSimLoop);
+  
+  // Initialize canvas
+  canvas = document.getElementById('drawArea');
+  canvas.height = canvas.clientHeight;
+  canvas.width = canvas.clientWidth;
+  canvasContext = canvas.getContext('2d', { alpha: false });
+  
+  // Clear canvas
+  canvasContext.fillStyle = 'white';
+  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Initialize Simulation
+  InitializeBalls();
+
+  // Initialize Chart
+  chart = new Chart(color_dead, color_infected, color_initial, color_recovered);
+  chartSvg = chart.Initialize('graphArea');
+  chart.Reset();
+}
+
+
+/////////////////////////////////////
+///////////// Core Loop /////////////
+/////////////////////////////////////
+
+function CoreSimLoop() {
+  ManageICU();
+  for (let i = 0; i < balls.length; i++) {
+    balls[i].Move();
+    for (let j = i + 1; j < balls.length; j++) {
+      ProcessCollision(i, j);
+    }
+  }
+  
+  //let n1 = performance.now();
+  
+  //Draw to canvas
+  canvasContext.fillStyle = 'white';
+  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < balls.length; i++) {
+    balls[i].Draw();
+  }
+  
+  //console.log(performance.now() - n1);
+}
 
 /////////////////////////////////////
 //////////// Ball Object ////////////
@@ -296,29 +426,8 @@ function ProcessCollision(b1, b2) {
 }
 
 /////////////////////////////////////
-///////////// Core Loop /////////////
+///////// Utility Functions /////////
 /////////////////////////////////////
-
-function CoreSimLoop() {
-  ManageICU();
-  for (let i = 0; i < balls.length; i++) {
-    balls[i].Move();
-    for (let j = i + 1; j < balls.length; j++) {
-      ProcessCollision(i, j);
-    }
-  }
-  
-  //let n1 = performance.now();
-  
-  //Draw to canvas
-  canvasContext.fillStyle = 'white';
-  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-  for (let i = 0; i < balls.length; i++) {
-    balls[i].Draw();
-  }
-  
-  //console.log(performance.now() - n1);
-}
 
 //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
 function Shuffle(array) {
@@ -353,6 +462,10 @@ function CreateCircleImage(radius, color) {
   
   return canvas;
 }
+
+/////////////////////////////////////
+//////////// Init Balls /////////////
+/////////////////////////////////////
 
 function InitializeBalls() {
   // Clear existing timers
@@ -429,6 +542,10 @@ function InitializeBalls() {
   //Randomize array to prepare for interaction reduction
   Shuffle(balls);
 }
+
+/////////////////////////////////////
+///////// Start Pause Stop //////////
+/////////////////////////////////////
 
 function StartSim() {
   if (simInProgress && startPauseFlag == null) { //Start from paused
@@ -518,6 +635,10 @@ function StopSim() {
   document.getElementById('criticalDeathRateSelector').disabled = false;
 }
 
+/////////////////////////////////////
+//////////// ICU Logic //////////////
+/////////////////////////////////////
+
 function ManageICU() {
   while (icuBalls.length < icuCapacity && critBalls.length > 0) {
     let ball = critBalls[0];
@@ -544,6 +665,10 @@ function ManageICU() {
     IncrementIcu();
   }
 }
+
+/////////////////////////////////////
+///////// Ball Event Logic //////////
+/////////////////////////////////////
 
 // The callback function for the infection timer
 function DoRecover(ball) {
@@ -602,7 +727,10 @@ function DoCritical(ball) {
   }
 }
 
-// Input functions
+/////////////////////////////////////
+////////// Input Functions //////////
+/////////////////////////////////////
+
 function SetRecoveryTime() {
   recoveryTime = recoveryTimeSelectorObj.value;
   recoveryTimeLabel.innerHTML = recoveryTime;
@@ -655,37 +783,6 @@ function SetSpeedReduction() {
 //////////// Working with HTML elements ////////////
 ////////////////////////////////////////////////////
 
-// Stat elements
-var healthyCountObj
-var infectedCountObj
-var recoveredCountObj
-var deathCountObj
-var criticalCountObj
-var icuCountObj
-
-//Input elements
-var recoveryTimeSelectorObj
-var recoveryTimeLabelObj
-var criticalCaseRateSelectorObj 
-var criticalCaseRateLabelObj
-var criticalDeathRateSelectorObj
-var criticalDeathRateLabelObj
-var icuCapacitySelectorObj
-var icuCapacityLabelObj
-var icuDeathRateSelectorObj
-var icuDeathRateLabelObj
-var popPercentSelectorObj
-var popPercentLabelObj
-var speedReductionSelectorObj
-var speedReductionLabelObj
-
-//Canvas
-var canvas;
-var canvasContext;
-
-//SVG elements
-var chartSvg
-
 // Functions for updating stats
 function DecrementHealthy() {
   healthyCount--;
@@ -728,75 +825,4 @@ function IncrementIcu() {
 function DecrementIcu() {
   icuCount--;
   icuCountObj.innerHTML = icuCount;
-}
-
-function init() {
-  // Initialize stat elements
-  healthyCountObj = document.getElementById("healthyCount");
-  infectedCountObj = document.getElementById("infectedCount");
-  recoveredCountObj = document.getElementById("recoveredCount");
-  deathCountObj = document.getElementById("deathCount");
-  criticalCountObj = document.getElementById("criticalCount");
-  icuCountObj = document.getElementById("icuCount");
-
-  // Initialize input elements
-  recoveryTimeSelectorObj = document.getElementById('recoveryTimeSelector');
-  recoveryTimeSelectorObj.value = recoveryTime;
-  recoveryTimeLabelObj = document.getElementById('recoveryTimeLabel');
-  recoveryTimeLabelObj.innerHTML = recoveryTime;
-  criticalCaseRateSelectorObj = document.getElementById('criticalCaseRateSelector');
-  criticalCaseRateSelectorObj.value = criticalCaseRate;
-  criticalCaseRateLabelObj = document.getElementById('criticalCaseRateLabel');
-  criticalCaseRateLabelObj.innerHTML = criticalCaseRate;
-  criticalDeathRateSelectorObj = document.getElementById('criticalDeathRateSelector');
-  criticalDeathRateSelectorObj.value = criticalDeathRate;
-  criticalDeathRateLabelObj = document.getElementById('criticalDeathRateLabel');
-  criticalDeathRateLabelObj.innerHTML = criticalDeathRate;
-  icuCapacitySelectorObj = document.getElementById('icuCapacitySelector');
-  icuCapacitySelectorObj.value = icuCapacity;
-  icuCapacityLabelObj = document.getElementById('icuCapacityLabel');
-  icuCapacityLabelObj.innerHTML = icuCapacity;
-  icuDeathRateSelectorObj = document.getElementById('icuDeathRateSelector');
-  icuDeathRateSelectorObj.value = icuDeathRate;
-  icuDeathRateLabelObj = document.getElementById('icuDeathRateLabel');
-  icuDeathRateLabelObj.innerHTML = icuDeathRate;
-  popPercentSelectorObj = document.getElementById('popPercentSelector');
-  popPercentSelectorObj.value = RI_PopPercent;
-  popPercentLabelObj = document.getElementById('popPercentLabel');
-  popPercentLabelObj.innerHTML = RI_PopPercent;
-  speedReductionSelectorObj = document.getElementById('speedReductionSelector');
-  speedReductionSelectorObj.value = RI_SpeedReduction;
-  speedReductionLabelObj = document.getElementById('speedReductionLabel');
-  speedReductionLabelObj.innerHTML = RI_SpeedReduction;
-
-  // Initialize the scheduler
-  taskScheduler = new Scheduler(gameLoopInterval, CoreSimLoop);
-  
-  // Initialize canvas
-  canvas = document.getElementById('drawArea');
-  canvas.height = canvas.clientHeight;
-  canvas.width = canvas.clientWidth;
-  canvasContext = canvas.getContext('2d', { alpha: false });
-  
-  // Clear canvas
-  canvasContext.fillStyle = 'white';
-  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Initialize Simulation
-  InitializeBalls();
-
-  // Initialize Chart
-  chart = new Chart(color_dead, color_infected, color_initial, color_recovered);
-  chartSvg = chart.Initialize('graphArea');
-  chart.Reset();
-}
-
-// Do initialization when document loads
-if (document.readyState === 'complete') {
-  init();
-}
-else {
-  window.onload = function() {
-    init();
-  }
 }
