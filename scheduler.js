@@ -4,7 +4,7 @@ function Scheduler (loopInterval, coreFunction) {
   let tasks = [];
   let mainLoopInterval = loopInterval;
   let timerId = null;
-  let taskId = BigInt(0);
+  let taskId = 0;
   
   let schedule = function () {
     let startTime = performance.now();
@@ -51,7 +51,7 @@ function Scheduler (loopInterval, coreFunction) {
     add: function (callback, intervalMs, repeat, context, arguments) {
       let ms = parseInt(intervalMs);
       context = ((context && typeof context === 'object') ? context : null);
-      taskId = taskId + 1n;
+      taskId = taskId + 1;
       
       if (typeof callback === 'function' && !isNaN(ms) && ms > 0) {
         tasks.push({
