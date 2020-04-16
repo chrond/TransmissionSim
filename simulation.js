@@ -176,7 +176,7 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
       this.canvasContext.fill();
       
       // Draw the image
-      //this.canvasContext.drawImage(this.GetImage(), this.posX-ball_radius, this.posY-ball_radius);
+      //this.canvasContext.drawImage(this.GetImage(), Math.floor(this.posX-ball_radius), Math.floor(this.posY-ball_radius));
     }
   }
 
@@ -366,13 +366,13 @@ function InitializeBalls() {
   else
     ball_radius = 4;
   
-  // Prepare ball images
-  //ball_initial = CreateCircleImage(ball_radius, color_initial);
-  //ball_infected = CreateCircleImage(ball_radius, color_infected);
-  //ball_recovered = CreateCircleImage(ball_radius, color_recovered);
-  //ball_critical = CreateCircleImage(ball_radius, color_critical);
-  //ball_icu = CreateCircleImage(ball_radius, color_icu);
-  //ball_dead = CreateCircleImage(ball_radius, color_dead);
+  // Prepare ball images (these are only used when drawing images rather than arcs)
+  ball_initial = CreateCircleImage(ball_radius, color_initial);
+  ball_infected = CreateCircleImage(ball_radius, color_infected);
+  ball_recovered = CreateCircleImage(ball_radius, color_recovered);
+  ball_critical = CreateCircleImage(ball_radius, color_critical);
+  ball_icu = CreateCircleImage(ball_radius, color_icu);
+  ball_dead = CreateCircleImage(ball_radius, color_dead);
   
   // Determine initial ball locations
   let boundsArea = canvas.width * canvas.height;
