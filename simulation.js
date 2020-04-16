@@ -54,7 +54,11 @@ var fps = 60;
 var gameLoopInterval = Math.floor(1000/fps);
 var taskScheduler;
 
-// Ball object
+
+/////////////////////////////////////
+//////////// Ball Object ////////////
+/////////////////////////////////////
+
 function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, highRisk) {
   this.posX = x;
   this.posY = y;
@@ -214,6 +218,10 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
 
 } //End Ball
 
+/////////////////////////////////////
+///////////// Collision /////////////
+/////////////////////////////////////
+
 function CheckCollision(ball1, ball2) {
   var absx = Math.abs(parseFloat(ball2.posX) - parseFloat(ball1.posX));
   var absy = Math.abs(parseFloat(ball2.posY) - parseFloat(ball1.posY));
@@ -287,6 +295,9 @@ function ProcessCollision(b1, b2) {
   }
 }
 
+/////////////////////////////////////
+///////////// Core Loop /////////////
+/////////////////////////////////////
 
 function CoreSimLoop() {
   ManageICU();
@@ -310,7 +321,7 @@ function CoreSimLoop() {
 }
 
 //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
-function shuffle(array) {
+function Shuffle(array) {
   var currentIndex = array.length, temporaryValue, randomIndex;
 
   // While there remain elements to shuffle...
@@ -415,7 +426,7 @@ function InitializeBalls() {
   }
   
   //Randomize array to prepare for interaction reduction
-  shuffle(balls);
+  Shuffle(balls);
 }
 
 function StartSim() {
