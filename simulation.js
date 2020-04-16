@@ -39,15 +39,15 @@ var RI_Total = 0;
 var RI_SpeedReduction = 80; //30 to 90
 
 // Stats
+var totalPopulation = 0;
 var healthyCount = 0;
 var infectedCount = 0;
 var recoveredCount = 0;
 var deathCount = 0;
 var criticalCount = 0;
 var icuCount = 0;
-var secondsElapsed = 0;
-var chartData = [[],[],[],[]];
 var chartDataTimerId = null;
+var chart;
 
 // The task scheduler for the main game loop
 var fps = 60;
@@ -368,7 +368,8 @@ function InitializeBalls() {
   icuBalls.length = 0;
   
   let po = document.getElementById('populationSelector');
-  let totalPopulation = po.options[po.selectedIndex].value;
+  totalPopulation = po.options[po.selectedIndex].value;
+  
   let so = document.getElementById('speedSelector');
   let speed = so.options[so.selectedIndex].value;
 
@@ -464,8 +465,7 @@ function StartSim() {
     deathCountObj.innerHTML = deathCount;
     criticalCountObj.innerHTML = criticalCount;
     icuCountObj.innerHTML = icuCount;
-    secondsElapsed = 0;
-    ResetChart();
+    chart.Reset();
     
     //Initialize interaction reduction
     RI_Total = 0;
@@ -474,15 +474,19 @@ function StartSim() {
     //Infect a ball
     balls[Math.floor(Math.random() * balls.length)].SetState("infected");
     
+    chart.Update(deathCount, infectedCount, healthyCount, recoveredCount);
     chartDataTimerId = taskScheduler.add(UpdateChart, 1000, true);
     
     //Start the sim
     taskScheduler.start();
     
-    
     //document.getElementById('startPause').disabled = false;
     document.getElementById('stopButton').disabled = false;
   }
+}
+
+function UpdateChart() {
+  chart.Update(deathCount, infectedCount, healthyCount, recoveredCount);
 }
 
 function PauseSim() {
@@ -504,7 +508,7 @@ function StopSim() {
   
   simInProgress = false;
 
-  DrawChart();
+  chart.Draw(totalPopulation);
   
   document.getElementById('startButton').disabled = false;
   document.getElementById('speedSelector').disabled = false;
@@ -647,97 +651,6 @@ function SetSpeedReduction() {
   }
 }
 
-/////////////////////////////////////
-////////// Chart Functions //////////
-/////////////////////////////////////
-
-var chartWidth, chartHeight;
-var chartInnerWidth, chartInnerHeight;
-var chartMargin = {top: 10, right: 30, bottom: 30, left: 60};
-var chartXAxis = null;
-var chartYAxis = null;
-
-function ResetChart() {
-  chartData = [[],[],[],[]];
-  chartData[0].color = color_dead;
-  chartData[1].color = color_infected;
-  chartData[2].color = color_initial;
-  chartData[3].color = color_recovered;
-  
-  // Remove all components from the chart
-  if (chartXAxis) chartXAxis.remove();
-  if (chartYAxis) chartYAxis.remove();
-  chartSvg.selectAll("path").remove();
-}
-
-function UpdateChart() {
-  //chart data will have four layers stacked on top of each other
-  chartData[0].push([secondsElapsed, 0, deathCount]);
-  let infectedPos = deathCount + infectedCount;
-  chartData[1].push([secondsElapsed, deathCount, infectedPos]);
-  let healthyPos = infectedPos + healthyCount;
-  chartData[2].push([secondsElapsed, infectedPos, healthyPos]);
-  let recoveredPos = healthyPos + recoveredCount;
-  chartData[3].push([secondsElapsed, healthyPos, recoveredPos]);
-
-  secondsElapsed++;
-}
-
-function InitializeChart(containerId) {
-  chartHeight = document.getElementById(containerId).clientHeight;
-  chartWidth = document.getElementById(containerId).clientWidth;
-  
-  chartInnerHeight = chartHeight - chartMargin.top - chartMargin.bottom;
-  chartInnerWidth = chartWidth - chartMargin.left - chartMargin.right;
-  
-  let svg = d3.select("#" + containerId)
-    .append("svg")
-    .attr("width", chartWidth)
-    .attr("height", chartHeight)
-    .append("g")
-    .attr("transform",
-          "translate(" + chartMargin.left + "," + chartMargin.top + ")");
-  ;
-
-  return svg;
-}
-
-function DrawChart() {
-  let po = document.getElementById('populationSelector');
-  let totalPopulation = po.options[po.selectedIndex].value;
-  
-  let xAxisScale = d3.scaleLinear()
-    .domain([0, secondsElapsed])
-    .range([0, chartInnerWidth]);
-
-  let yAxisScale = d3.scaleLinear()
-    .domain([0, totalPopulation])
-    .range([chartInnerHeight, 0]);
-
-  let chartArea = d3.area()
-    .x(function(d, i) { return xAxisScale(d[0]); })
-    .y0(function(d) { return yAxisScale(d[1]); })
-    .y1(function(d) { return yAxisScale(d[2]); });
-
-  // Show the area
-  chartSvg.selectAll("chartLayer")
-    .data(chartData) //For each of the four arrays in chartData
-    .join( enter =>
-      enter.append("path") //Add a path
-      .style("fill", function(d) { return d.color; })
-      .attr("d", chartArea)
-    );
-    
-  // Add X axis
-  chartXAxis = chartSvg.append("g")
-    .attr("transform", "translate(0," + chartInnerHeight + ")")
-    .call(d3.axisBottom(xAxisScale).ticks(5));
-    
-  // Add Y axis
-  chartYAxis = chartSvg.append("g")
-    .call(d3.axisLeft(yAxisScale));
-}
-
 ////////////////////////////////////////////////////
 //////////// Working with HTML elements ////////////
 ////////////////////////////////////////////////////
@@ -873,8 +786,9 @@ function init() {
   InitializeBalls();
 
   // Initialize Chart
-  chartSvg = InitializeChart('graphArea');
-  ResetChart();
+  chart = new Chart(color_dead, color_infected, color_initial, color_recovered);
+  chartSvg = chart.Initialize('graphArea');
+  chart.Reset();
 }
 
 // Do initialization when document loads
