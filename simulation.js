@@ -22,12 +22,12 @@ var startPauseFlag = null;
 var simEndTimerId = null;
 
 // Contagion
-var recoveryTime = 8;
+var recoveryTime = 6;
 var criticalCaseRate = 0.15; // chance for each infection to become a critical case
 var criticalDeathRate = 0.90; // death rate for critical cases that do NOT get intensive care
 
 // Hospital
-var icuCapacity = 1; // 0 to 20
+var icuCapacity = 2; // 0 to 20
 var icuDeathRate = 0.05; // death rate for critical cases that get intensive care
 
 // Behavior - Reduced Interaction
