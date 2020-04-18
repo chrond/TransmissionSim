@@ -166,7 +166,7 @@ function init() {
 /////////////////////////////////////
 
 function CoreSimLoop() {
-  let n1 = performance.now();
+  //let n1 = performance.now();
   
   ManageICU();
   for (let i = 0; i < balls.length; i++) {
@@ -186,7 +186,7 @@ function CoreSimLoop() {
   
   renderer.drawScene();
   
-  console.log(performance.now() - n1);
+  //console.log(performance.now() - n1);
 }
 
 /////////////////////////////////////
@@ -504,16 +504,19 @@ function InitializeBalls() {
     }
   }
   while (areaCapacity < totalPopulation && ballLength > ball_radius*2 + 1);
+  
+  //Find out actual number of rows required
+  ballCountY = Math.ceil(totalPopulation / ballCountX);
 
   // Expand height and width to fill the area
-  let ballWidth = Math.floor(drawAreaWidth / ballCountX);
-  let ballHeight = Math.floor(drawAreaHeight / ballCountY);
-  
+  let ballWidth = drawAreaWidth / ballCountX;
+  let ballHeight = drawAreaHeight / ballCountY;
+
   // Add the balls
   let row = 0, col = 0;
   for (let i = 0; i < totalPopulation; i++) {
-    let x = col*ballWidth + Math.floor(ballWidth/2);
-    let y = row*ballHeight + Math.floor(ballHeight/2);
+    let x = Math.floor(col*ballWidth + ballWidth/2);
+    let y = Math.floor(row*ballHeight + ballHeight/2);
     
     let highRisk = Math.random() < criticalCaseRate;
     
