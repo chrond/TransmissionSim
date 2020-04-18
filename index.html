@@ -4,18 +4,48 @@
   <title>Transmission Simulator</title>
   <meta charset="utf-8">
   <link rel="stylesheet" href="style.css">
-  <script src="https://d3js.org/d3.v5.min.js"></script>
 </head>
 <body>
 
+<script id="vertex-shader" type="x-shader/x-vertex">
+  attribute vec2 aVertexPosition;
+
+  uniform vec2 uScalingFactor;
+  uniform vec2 uTranslationVector;
+
+  void main() {
+    vec2 translatedPosition = vec2(
+      aVertexPosition.x + uTranslationVector.x,
+      aVertexPosition.y + uTranslationVector.y
+    );
+
+    gl_Position = vec4(translatedPosition * uScalingFactor, 0.0, 1.0);
+  }
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+  #ifdef GL_ES
+    precision highp float;
+  #endif
+
+  uniform vec4 uGlobalColor;
+
+  void main() {
+    gl_FragColor = uGlobalColor;
+  }
+</script>
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
 <script src="scheduler.js"></script>
 <script src="chart.js"></script>
+<script src="renderer.js"></script>
 <script src="simulation.js"></script>
 
 <div id="mainDiv">
   <h1>Transmission Simulator</h1>
   <div id="upperBox">
     <canvas id="drawArea" moz-opaque></canvas>
+    
     <div id="inputPanel">
 
       <button class="button" id="startButton" onclick="StartSim()" style="width: 100%; margin-bottom: 10px;">Start Simulation</button>
@@ -39,6 +69,7 @@
               <option value="500" selected="selected">500</option>
               <option value="750">750</option>
               <option value="1000">1000</option>
+              <option value="2000">2000</option>
           </select>
         </div>
       </div>

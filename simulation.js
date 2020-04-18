@@ -10,20 +10,12 @@ var icuBalls = []; // array for balls in intensive care (in icu)
 
 var ball_radius = 4;
 
-var color_initial = 'rgb(90,160,255)';
-var color_infected = 'rgb(180,100,60)';
-var color_recovered = 'rgb(150,200,130)';
-var color_critical = 'rgb(255,0,0)';
-var color_icu = 'rgb(255,0,200)';
-var color_dead = 'rgb(60,30,60)';
-
-// Canvas images for each ball color
-var ball_initial;
-var ball_infected;
-var ball_recovered;
-var ball_critical;
-var ball_icu;
-var ball_dead;
+var color_initial = [.353,.627,1.0,1.0];
+var color_infected = [.706,.392,.235,1.0];
+var color_recovered = [.588,.784,.510,1.0];
+var color_critical = [1.0,0,0,1.0];
+var color_icu = [1.0,0,.784,1.0];
+var color_dead = [.235,.118,.235,1.0];
 
 var simInProgress = false;
 var startPauseFlag = null;
@@ -78,11 +70,15 @@ var popPercentLabelObj
 var speedReductionSelectorObj
 var speedReductionLabelObj
 
+var drawAreaHeight
+var drawAreaWidth
+
 //Canvas and chart DOM elements
 var canvas;
 var canvasContext;
-var chartSvg
+var chartSvg;
 
+var renderer;
 
 /////////////////////////////////////
 //////////// Initialize /////////////
@@ -142,19 +138,24 @@ function init() {
   
   // Initialize canvas
   canvas = document.getElementById('drawArea');
+  drawAreaWidth = canvas.clientWidth;
+  drawAreaHeight = canvas.clientHeight;
   canvas.height = canvas.clientHeight;
   canvas.width = canvas.clientWidth;
-  canvasContext = canvas.getContext('2d', { alpha: false });
+  //canvasContext = canvas.getContext('2d', { alpha: false });
   
   // Clear canvas
-  canvasContext.fillStyle = 'white';
-  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-  
+  //canvasContext.fillStyle = 'white';
+  //canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+  renderer = new Renderer(canvas, balls);
+  //renderer.init(ball_radius);
+
   // Initialize Simulation
   InitializeBalls();
 
   // Initialize Chart
-  chart = new Chart(color_dead, color_infected, color_initial, color_recovered);
+  chart = new Chart(MakeRgb(color_dead), MakeRgb(color_infected), MakeRgb(color_initial), MakeRgb(color_recovered));
   chartSvg = chart.Initialize('graphArea');
   chart.Reset();
 }
@@ -165,6 +166,8 @@ function init() {
 /////////////////////////////////////
 
 function CoreSimLoop() {
+  let n1 = performance.now();
+  
   ManageICU();
   for (let i = 0; i < balls.length; i++) {
     balls[i].Move();
@@ -172,40 +175,43 @@ function CoreSimLoop() {
       ProcessCollision(i, j);
     }
   }
-  
-  //let n1 = performance.now();
-  
+
   //Draw to canvas
-  canvasContext.fillStyle = 'white';
-  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
-  for (let i = 0; i < balls.length; i++) {
-    balls[i].Draw();
-  }
+  //canvasContext.fillStyle = 'white';
+  //canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+  //for (let i = 0; i < balls.length; i++) {
+  //  balls[i].Draw();
+  //}
   
-  //console.log(performance.now() - n1);
+  renderer.drawScene();
+  
+  console.log(performance.now() - n1);
 }
 
 /////////////////////////////////////
 //////////// Ball Object ////////////
 /////////////////////////////////////
 
-function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, highRisk) {
+function Ball(areaHeight, areaWidth, id, x, y, state, angle, radius, speed, highRisk) {
+  this.areaHeight = areaHeight;
+  this.areaWidth = areaWidth;
   this.posX = x;
   this.posY = y;
   this.radius = radius;
   this.speed = speed;
   this.highRisk = highRisk; // will become critical if infected
-  this.canvas = canvas; // parent canvas
-  this.canvasContext = canvasContext; // canvas drawing context
   this.id = id; // id of ball
   this.angle = angle; // initial angle of movement in radians
-  this.color = color_initial;
+  this.color = color_initial; //used by renderer
   this.infectionTimerId = null;
   this.deathTimerId = null;
   this.criticalTimerId = null;
   this.speedFactor = 1; // dynamically changing speed factor for interaction reduction
   this.critical = false;
   this.icu = false;
+  this.visible = true; //used by renderer
+  this.translation = [this.posX, this.posY]; //used by renderer
 
   if (!this.angle)
     this.angle = Math.PI / 7;
@@ -214,11 +220,11 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
   if (!this.state)
     this.state = "initial";
 
-  // angle is used only for initialization
-  // direction and speed together is velocity
+  // Angle is used only for initialization
+  // Direction and speed together is velocity
   this.vx = Math.cos(this.angle) * this.speed; // velocity x
   this.vy = Math.sin(this.angle) * this.speed; // velocity y
-
+  
   this.SetState = function (newState) {
     switch(newState) {
       case "initial":
@@ -242,13 +248,14 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
         break;
       case "buried":
         this.state = newState;
+        this.visible = false;
         break;
       default:
         this.state = newState;
         this.color = color_initial;
     }
-    
-    // if infected, start recovery timer
+
+    // If infected, start recovery timer
     if (this.state == "infected") {
       this.infectionTimerId = taskScheduler.add(
         DoRecover,
@@ -258,7 +265,7 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
         [this] //pass this as an argument
       );
       
-      // if high risk, start critical timer
+      // If high risk, start critical timer
       if (this.highRisk) {
         this.criticalTimerId = taskScheduler.add(
           DoCritical,
@@ -270,7 +277,7 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
       }
     }
     
-    // if dead, start death timer
+    // If dead, start death timer
     if (this.state == "dead") {
       this.deathTimerId = taskScheduler.add(
         DoDeath,
@@ -282,35 +289,16 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
     }
   }
   
-  this.SetState(this.state); //set the color based on state
-
-  this.GetImage = function () {
-    let image = ball_initial;
-
-    if (this.color === color_infected)
-      image = ball_infected;
-    else if (this.color === color_recovered)
-      image = ball_recovered;
-    else if (this.color === color_critical)
-      image = ball_critical;
-    else if (this.color === color_icu)
-      image = ball_icu;
-    else if (this.color === color_dead)
-      image = ball_dead;
-
-    return image;
-  }
-
+  // Set the color based on state
+  this.SetState(this.state);
+  
   this.Draw = function () {
     if (this.state != "buried") {
       // Draw the circle
-      this.canvasContext.fillStyle = this.color;
-      this.canvasContext.beginPath();
-      this.canvasContext.arc(this.posX, this.posY, this.radius, 0, Math.PI*2, true);
-      this.canvasContext.fill();
-      
-      // Draw the image
-      //this.canvasContext.drawImage(this.GetImage(), Math.floor(this.posX-ball_radius), Math.floor(this.posY-ball_radius));
+      //this.canvasContext.fillStyle = this.color;
+      //this.canvasContext.beginPath();
+      //this.canvasContext.arc(this.posX, this.posY, this.radius, 0, Math.PI*2, true);
+      //this.canvasContext.fill();
     }
   }
 
@@ -324,20 +312,23 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
     this.posY += this.vy * factor;
 
     this.CheckBounds();
+    
+    //Convert from canvas 2d coordinates to webgl coordinates
+    this.translation = [this.posX * 2 - areaWidth, this.posY * -2 + areaHeight];
   }
 
   this.CheckBounds = function () {
     //Handle bounds collision
-    if (this.posX >= this.canvas.width - this.radius) {
-      this.posX = this.canvas.width - this.radius - 1;
+    if (this.posX >= areaWidth - this.radius) {
+      this.posX = areaWidth - this.radius - 1;
       this.vx = -Math.abs(this.vx);
     }
     if ( this.posX <= this.radius) {
       this.posX = this.radius+1;
       this.vx = Math.abs(this.vx);
     }
-    if (this.posY >= this.canvas.height - this.radius) {
-      this.posY = this.canvas.height - this.radius - 1;
+    if (this.posY >= areaHeight - this.radius) {
+      this.posY = areaHeight - this.radius - 1;
       this.vy = -Math.abs(this.vy);
     }
     if (this.posY <= this.radius) {
@@ -353,16 +344,21 @@ function Ball(canvas, canvasContext, id, x, y, state, angle, radius, speed, high
 /////////////////////////////////////
 
 function CheckCollision(ball1, ball2) {
-  var absx = Math.abs(parseFloat(ball2.posX) - parseFloat(ball1.posX));
-  var absy = Math.abs(parseFloat(ball2.posY) - parseFloat(ball1.posY));
+  var absx = Math.abs(ball2.posX - ball1.posX);
+  var absy = Math.abs(ball2.posY - ball1.posY);
+  
+  if (absx > ball_radius*2 || absy > ball_radius*2)
+    return false;
 
   // find distance between two balls.
   var distance = (absx * absx) + (absy * absy);
   distance = Math.sqrt(distance);
+  
   // check if distance is less than sum of two radius - if yes, collision
-  if (distance < (parseFloat(ball1.radius) + parseFloat(ball2.radius))) {
+  if (distance < ball_radius*2) {
     return true;
   }
+  
   return false;
 }
 
@@ -389,8 +385,6 @@ function ProcessCollision(b1, b2) {
     // calculate impulse vectors
     let impulseX1 = ball1.posX - ball2.posX;
     let impulseY1 = ball1.posY - ball2.posY;
-    let impulseX2 = ball2.posX - ball1.posX;
-    let impulseY2 = ball2.posY - ball1.posY;
     
     if (impulseX1 != 0 || impulseY1 != 0) {
       // normalize the impulse vectors
@@ -401,16 +395,10 @@ function ProcessCollision(b1, b2) {
       // set new velocity
       ball1.vx = impulseX1 * ball1.speed;
       ball1.vy = impulseY1 * ball1.speed;
-    }
-    if (impulseX2 != 0 || impulseY2 != 0) {
-      // normalize the impulse vectors
-      let impulseMag2 = Math.sqrt(impulseX2*impulseX2 + impulseY2*impulseY2);
-      impulseX2 = impulseX2/impulseMag2;
-      impulseY2 = impulseY2/impulseMag2;
       
-      // set new velocity
-      ball2.vx = impulseX2 * ball2.speed;
-      ball2.vy = impulseY2 * ball2.speed;
+      // direction of ball 2 will be opposite of ball 1
+      ball2.vx = -impulseX1 * ball2.speed;
+      ball2.vy = -impulseY1 * ball2.speed;
     }
 
     // make sure balls are not overlapping
@@ -428,6 +416,19 @@ function ProcessCollision(b1, b2) {
 /////////////////////////////////////
 ///////// Utility Functions /////////
 /////////////////////////////////////
+
+function RgbToHex(rgbString) {
+  let rgb = rgbString.split("(")[1].split(")")[0];
+  rgb = rgb.split(",");
+
+  var hex = rgb.map(function(x){       //For each array element
+    x = parseInt(x).toString(16);      //Convert to a base16 string
+    return (x.length==1) ? "0"+x : x;  //Add zero if we get only one character
+  })
+
+  hex = "0x"+hex.join("");
+  return hex;
+}
 
 //utility function from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
 function Shuffle(array) {
@@ -449,18 +450,11 @@ function Shuffle(array) {
   return array;
 }
 
-function CreateCircleImage(radius, color) {
-  let canvas = document.createElement('canvas');
-  canvas.width = radius*2;
-  canvas.height = radius*2;
-  let context = canvas.getContext('2d');
-  
-  context.fillStyle = color;
-  context.beginPath();
-  context.arc(radius, radius, radius, 0, Math.PI*2, true);
-  context.fill();
-  
-  return canvas;
+function MakeRgb(colorArray) {
+  if (colorArray && colorArray.length >= 3)
+    return 'rgb(' + colorArray[0] * 255 + ',' + colorArray[1] * 255 + ',' + colorArray[2] * 255 + ')';
+  else
+    return 'rgb(0,0,0)';
 }
 
 /////////////////////////////////////
@@ -486,27 +480,23 @@ function InitializeBalls() {
   let so = document.getElementById('speedSelector');
   let speed = so.options[so.selectedIndex].value;
 
-  if (totalPopulation > 500)
+  if (totalPopulation > 1000)
+    ball_radius = 2;
+  else if (totalPopulation > 500)
     ball_radius = 3;
   else
     ball_radius = 4;
-  
-  // Prepare ball images (these are only used when drawing images rather than arcs)
-  ball_initial = CreateCircleImage(ball_radius, color_initial);
-  ball_infected = CreateCircleImage(ball_radius, color_infected);
-  ball_recovered = CreateCircleImage(ball_radius, color_recovered);
-  ball_critical = CreateCircleImage(ball_radius, color_critical);
-  ball_icu = CreateCircleImage(ball_radius, color_icu);
-  ball_dead = CreateCircleImage(ball_radius, color_dead);
-  
+
+  renderer.init(ball_radius*2);
+
   // Determine initial ball locations
-  let boundsArea = canvas.width * canvas.height;
+  let boundsArea = drawAreaWidth * drawAreaHeight;
   let ballSpace = boundsArea / totalPopulation;
   let ballLength = Math.sqrt(ballSpace);
   let ballCountX = 0, ballCountY = 0, areaCapacity = 0;
   do {
-    ballCountX = Math.floor(canvas.width / ballLength);
-    ballCountY = Math.floor(canvas.height / ballLength);
+    ballCountX = Math.floor(drawAreaWidth / ballLength);
+    ballCountY = Math.floor(drawAreaHeight / ballLength);
     areaCapacity = ballCountX * ballCountY;
     
     if (areaCapacity < totalPopulation) {
@@ -516,8 +506,8 @@ function InitializeBalls() {
   while (areaCapacity < totalPopulation && ballLength > ball_radius*2 + 1);
 
   // Expand height and width to fill the area
-  let ballWidth = Math.floor(canvas.width / ballCountX);
-  let ballHeight = Math.floor(canvas.height / ballCountY);
+  let ballWidth = Math.floor(drawAreaWidth / ballCountX);
+  let ballHeight = Math.floor(drawAreaHeight / ballCountY);
   
   // Add the balls
   let row = 0, col = 0;
@@ -528,7 +518,7 @@ function InitializeBalls() {
     let highRisk = Math.random() < criticalCaseRate;
     
     //Add ball
-    balls.push(new Ball(canvas, canvasContext, 'n'+(i+1).toString(), x, y, "initial", Math.random()*2*Math.PI, ball_radius, speed, highRisk));
+    balls.push(new Ball(drawAreaHeight, drawAreaWidth, 'n'+(i+1).toString(), x, y, "initial", Math.random()*2*Math.PI, ball_radius, speed, highRisk));
     
     if (col == ballCountX-1) {
       row++;
