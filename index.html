@@ -57,8 +57,8 @@
         <div class="inputItem">Speed:
           <select id='speedSelector'>
               <option value="0.3">Slowest</option>
-              <option value="0.5">Slow</option>
-              <option value="1" selected="selected">Medium</option>
+              <option value="0.5" selected="selected">Slow</option>
+              <option value="1">Medium</option>
               <option value="2">Fast</option>
           </select>
         </div>
@@ -77,9 +77,9 @@
       <div class="attributeGroup">
         <div class="groupHeading">Contagion Attributes</div>
         <div class="inputItem">Recovery Time:
-          <input type="range" class="slider" id="recoveryTimeSelector" min="1" max="15" value="8" step="1" onchange="SetRecoveryTime()"
+          <input type="range" class="slider" id="recoveryTimeSelector" min="1" max="10" value="6" step="1" onchange="SetRecoveryTime()"
             oninput="recoveryTimeLabelObj.innerHTML = recoveryTimeSelectorObj.value;">
-          <label id="recoveryTimeLabel" for="recoveryTimeSelector">8</label>
+          <label id="recoveryTimeLabel" for="recoveryTimeSelector">6</label>
         </div>
         <div class="inputItem">Critical Case Rate:
           <input type="range" class="slider" id="criticalCaseRateSelector" min="0" max="1" value="0.15" step="0.05" onchange="SetCriticalCaseRate()"
@@ -96,9 +96,9 @@
       <div class="attributeGroup">
         <div class="groupHeading">Hospital Attributes</div>
         <div class="inputItem">ICU Capacity:
-          <input type="range" class="slider" id="icuCapacitySelector" min="0" max="20" value="1" step="1" onchange="SetIcuCapacity()"
+          <input type="range" class="slider" id="icuCapacitySelector" min="0" max="20" value="2" step="1" onchange="SetIcuCapacity()"
             oninput="icuCapacityLabelObj.innerHTML = icuCapacitySelectorObj.value;">
-          <label id="icuCapacityLabel" for="icuCapacitySelector">1</label>
+          <label id="icuCapacityLabel" for="icuCapacitySelector">2</label>
         </div>
         <div class="inputItem">Death Rate (with icu):
           <input type="range" class="slider" id="icuDeathRateSelector" min="0" max="1" value="0.05" step="0.05" onchange="SetIcuDeathRate()"
