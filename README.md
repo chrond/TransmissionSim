@@ -11,7 +11,9 @@ Increasing the speed of an individual ball generally increases the rate at which
 ## Purpose
 
 This simplistic bouncing ball simulation aids in the visualization of the transmission of a contagion within a community.
+
 At the end of the simulation, a stacked area chart is displayed that shows the count of the infected members over time.
+
 During the simulation, parameters can be changed which can affect the curve of the graph. For example, you can reduce the speed of a certain percentage of the population. The speed can be adjusted at any time during the simulation, and you can see the effect that it has on the curve that is produced.
 
 ## Technology Used
